@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, TerminalSquare, X } from "lucide-react";
 import { useClusterStore } from "@/store/useClusterStore";
 import { useTerminalStore } from "@/store/useTerminalStore";
+import { useSettingsStore } from "@/store/useSettingsStore";
 import { runKubectl, getCompletions, applyManifests } from "@/lib/cli";
 
 const PROMPT = "user@kubesim:~$";
@@ -18,6 +19,7 @@ const PROMPT = "user@kubesim:~$";
 export function SimTerminal() {
   const open = useClusterStore((s) => s.ui.terminalOpen);
   const toggleTerminal = useClusterStore((s) => s.toggleTerminal);
+  const fontSize = useSettingsStore((s) => s.terminalFontSize);
   const lines = useTerminalStore((s) => s.lines);
   const history = useTerminalStore((s) => s.history);
   const pushInput = useTerminalStore((s) => s.pushInput);
@@ -137,7 +139,8 @@ export function SimTerminal() {
       <div
         ref={scrollRef}
         onClick={() => inputRef.current?.focus()}
-        className="flex-1 cursor-text overflow-y-auto px-3 py-2 text-[13px] leading-relaxed"
+        style={{ fontSize }}
+        className="flex-1 cursor-text overflow-y-auto px-3 py-2 leading-relaxed"
       >
         {lines.map((line) => (
           <div key={line.id} className="whitespace-pre-wrap break-all">

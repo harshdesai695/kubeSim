@@ -2,24 +2,27 @@
 
 import { useEffect } from "react";
 import { useClusterStore } from "@/store/useClusterStore";
+import { useSettingsStore } from "@/store/useSettingsStore";
 
-/** Interval between reconciliation ticks (ms). */
-const TICK = 500;
+/** Base interval between reconciliation ticks (ms). */
+const BASE_TICK = 500;
 
 /**
  * ReconcileEngine — drives the simulated control loops.
  *
  * Mounted once; it calls the store's `reconcile()` on a fixed interval so the
  * cluster "feels alive" (scheduling, container startup, self-healing, rolling
- * updates) even without user interaction. Renders nothing.
+ * updates). The cadence scales with the user's simulation-speed setting.
  */
 export function ReconcileEngine() {
   const reconcile = useClusterStore((s) => s.reconcile);
+  const simSpeed = useSettingsStore((s) => s.simSpeed);
 
   useEffect(() => {
-    const id = setInterval(reconcile, TICK);
+    const interval = Math.max(120, BASE_TICK / simSpeed);
+    const id = setInterval(reconcile, interval);
     return () => clearInterval(id);
-  }, [reconcile]);
+  }, [reconcile, simSpeed]);
 
   return null;
 }

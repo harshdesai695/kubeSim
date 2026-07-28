@@ -8,6 +8,7 @@
  */
 
 import { useTerminalStore } from "@/store/useTerminalStore";
+import { useSettingsStore } from "@/store/useSettingsStore";
 
 let cliActive = false;
 
@@ -17,5 +18,6 @@ export function setCliActive(active: boolean): void {
 
 export function echoCommand(command: string): void {
   if (cliActive) return;
+  if (!useSettingsStore.getState().showCliToast) return;
   useTerminalStore.getState().pushEcho(command);
 }

@@ -301,6 +301,10 @@ export interface ClusterState {
   openDrawer: (selected: SelectedObject) => void;
   closeDrawer: () => void;
   resetCluster: () => void;
+  /** Serialize the whole simulated cluster for download. */
+  exportSnapshot: () => Record<string, unknown>;
+  /** Replace the whole cluster from a previously-exported snapshot. */
+  importSnapshot: (data: Record<string, unknown>) => boolean;
 }
 
 const initialData = (): Pick<
@@ -2854,6 +2858,75 @@ export const useClusterStore = create<ClusterState>()(
           false,
           "resetCluster",
         ),
+
+      exportSnapshot: () => {
+        const s = get();
+        return {
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          namespace: s.namespace,
+          namespaces: s.namespaces,
+          simClock: s.simClock,
+          timeScale: s.timeScale,
+          nodes: s.nodes,
+          pods: s.pods,
+          replicaSets: s.replicaSets,
+          deployments: s.deployments,
+          statefulSets: s.statefulSets,
+          daemonSets: s.daemonSets,
+          jobs: s.jobs,
+          cronJobs: s.cronJobs,
+          hpas: s.hpas,
+          services: s.services,
+          ingresses: s.ingresses,
+          networkPolicies: s.networkPolicies,
+          configMaps: s.configMaps,
+          secrets: s.secrets,
+          persistentVolumes: s.persistentVolumes,
+          persistentVolumeClaims: s.persistentVolumeClaims,
+          events: s.events,
+        };
+      },
+
+      importSnapshot: (data) => {
+        if (!data || typeof data !== "object" || !Array.isArray(data.nodes))
+          return false;
+        const arr = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
+        set(
+          (state) => ({
+            nodes: arr(data.nodes),
+            pods: arr(data.pods),
+            replicaSets: arr(data.replicaSets),
+            deployments: arr(data.deployments),
+            statefulSets: arr(data.statefulSets),
+            daemonSets: arr(data.daemonSets),
+            jobs: arr(data.jobs),
+            cronJobs: arr(data.cronJobs),
+            hpas: arr(data.hpas),
+            services: arr(data.services),
+            ingresses: arr(data.ingresses),
+            networkPolicies: arr(data.networkPolicies),
+            configMaps: arr(data.configMaps),
+            secrets: arr(data.secrets),
+            persistentVolumes: arr(data.persistentVolumes),
+            persistentVolumeClaims: arr(data.persistentVolumeClaims),
+            events: arr(data.events),
+            namespace:
+              typeof data.namespace === "string" ? data.namespace : "default",
+            namespaces: Array.isArray(data.namespaces)
+              ? (data.namespaces as string[])
+              : [...DEFAULT_NAMESPACES],
+            simClock:
+              typeof data.simClock === "number" ? data.simClock : Date.now(),
+            timeScale:
+              typeof data.timeScale === "number" ? data.timeScale : 1,
+            ui: { ...state.ui, drawerOpen: false, selected: null },
+          }),
+          false,
+          "importSnapshot",
+        );
+        return true;
+      },
     }),
     { name: "kubeSim/cluster" },
   ),

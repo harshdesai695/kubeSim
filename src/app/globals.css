@@ -7,7 +7,44 @@
 
 :root {
   --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+
+  /* Panel surface palette (dark control-room) as RGB triplets. */
+  --panel-950: 10 14 20;
+  --panel-900: 13 18 24;
+  --panel-850: 17 24 35;
+  --panel-800: 21 31 46;
+  --panel-700: 28 42 61;
+  --panel-600: 38 56 79;
 }
+
+/* Light theme — remap surfaces + slate text so the whole app re-themes. */
+html.light {
+  --panel-950: 236 240 245;
+  --panel-900: 248 250 252;
+  --panel-850: 255 255 255;
+  --panel-800: 241 245 249;
+  --panel-700: 226 232 240;
+  --panel-600: 203 213 225;
+}
+
+html.light body {
+  color: #0f172a;
+  background-image:
+    radial-gradient(circle at 20% 0%, rgba(50, 108, 229, 0.06), transparent 45%),
+    radial-gradient(circle at 90% 100%, rgba(34, 197, 94, 0.05), transparent 40%);
+}
+html.light .react-flow__background {
+  background-color: rgb(236 240 245);
+}
+/* Flip light-on-dark text tokens to dark-on-light (accent text stays). */
+html.light .text-white:not([class*="bg-kube"]):not([class*="bg-status"]) {
+  color: #0f172a;
+}
+html.light .text-slate-200 { color: #1e293b; }
+html.light .text-slate-300 { color: #334155; }
+html.light .text-slate-400 { color: #475569; }
+html.light .text-slate-500 { color: #64748b; }
+html.light .text-slate-600 { color: #94a3b8; }
 
 html,
 body {

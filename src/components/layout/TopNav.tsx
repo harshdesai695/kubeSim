@@ -1,9 +1,10 @@
 "use client";
 
-import { Bell, Boxes, Layers, RotateCcw, TerminalSquare } from "lucide-react";
+import { Bell, Boxes, Github, GraduationCap, Layers, RotateCcw, Settings2, TerminalSquare } from "lucide-react";
 import { useClusterStore } from "@/store/useClusterStore";
 import { useFlowStore } from "@/store/useFlowStore";
 import { useTerminalStore } from "@/store/useTerminalStore";
+import { useUIStore } from "@/store/useUIStore";
 import { resetRouting } from "@/lib/network";
 
 export function TopNav() {
@@ -22,6 +23,8 @@ export function TopNav() {
   const toggleWorkloads = useClusterStore((s) => s.toggleWorkloads);
   const resetCluster = useClusterStore((s) => s.resetCluster);
   const pushEvent = useClusterStore((s) => s.pushEvent);
+  const openScenarios = useUIStore((s) => s.openScenarios);
+  const openSettings = useUIStore((s) => s.openSettings);
 
   const handleNamespaceChange = (value: string) => {
     if (value === "__new__") {
@@ -62,6 +65,16 @@ export function TopNav() {
             Kubernetes Simulator
           </p>
         </div>
+        <a
+          href="https://github.com/harshdesai695/kubeSim"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="View on GitHub"
+          className="ml-1.5 flex items-center gap-1.5 rounded-md border border-panel-700 bg-panel-850 px-2 py-1.5 text-xs font-semibold text-slate-300 transition hover:bg-panel-700 hover:text-white"
+        >
+          <Github className="h-4 w-4" />
+          <span className="hidden sm:inline">GitHub</span>
+        </a>
       </div>
 
       {/* Controls */}
@@ -104,6 +117,13 @@ export function TopNav() {
         </div>
 
         <NavButton
+          active={false}
+          onClick={openScenarios}
+          icon={<GraduationCap className="h-4 w-4" />}
+          label="Scenarios"
+        />
+
+        <NavButton
           active={workloadsOpen}
           onClick={toggleWorkloads}
           icon={<Layers className="h-4 w-4" />}
@@ -124,6 +144,14 @@ export function TopNav() {
           label="Events"
           badge={eventCount}
         />
+
+        <button
+          onClick={openSettings}
+          className="flex items-center gap-1.5 rounded-md border border-panel-700 bg-panel-850 px-2.5 py-1.5 text-xs font-semibold text-slate-300 transition hover:bg-panel-700"
+          title="Settings"
+        >
+          <Settings2 className="h-4 w-4" />
+        </button>
 
         <button
           onClick={handleReset}

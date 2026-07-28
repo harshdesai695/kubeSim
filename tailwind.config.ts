@@ -9,14 +9,14 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Control-room surface palette
+        // Control-room surface palette (CSS-variable driven for theming)
         panel: {
-          950: "#0a0e14",
-          900: "#0d1218",
-          850: "#111823",
-          800: "#151f2e",
-          700: "#1c2a3d",
-          600: "#26384f",
+          950: "rgb(var(--panel-950) / <alpha-value>)",
+          900: "rgb(var(--panel-900) / <alpha-value>)",
+          850: "rgb(var(--panel-850) / <alpha-value>)",
+          800: "rgb(var(--panel-800) / <alpha-value>)",
+          700: "rgb(var(--panel-700) / <alpha-value>)",
+          600: "rgb(var(--panel-600) / <alpha-value>)",
         },
         // Kubernetes-inspired accent
         kube: {

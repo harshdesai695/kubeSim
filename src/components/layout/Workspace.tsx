@@ -7,21 +7,20 @@ import { DetailDrawer } from "@/components/drawer/DetailDrawer";
 import { EventsPanel } from "@/components/events/EventsPanel";
 import { WorkloadsPanel } from "@/components/workloads/WorkloadsPanel";
 import { ReconcileEngine } from "@/components/system/ReconcileEngine";
+import { ThemeApplier } from "@/components/system/ThemeApplier";
+import { OnboardingTour } from "@/components/system/OnboardingTour";
+import { ScenariosMenu } from "@/components/scenarios/ScenariosMenu";
+import { Walkthrough } from "@/components/scenarios/Walkthrough";
+import { SettingsPanel } from "@/components/settings/SettingsPanel";
 
 /**
  * Workspace — the top-level "control room" shell.
- *
- * Layout regions:
- *  - Top: navigation bar
- *  - Left (collapsible): workloads panel
- *  - Center: cluster canvas (React Flow)
- *  - Bottom (collapsible): simulated terminal
- *  - Right (slide-in): object detail drawer / events feed
  */
 export function Workspace() {
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-panel-950">
       <ReconcileEngine />
+      <ThemeApplier />
       <TopNav />
 
       <div className="relative flex min-h-0 flex-1">
@@ -32,6 +31,7 @@ export function Workspace() {
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="relative min-h-0 flex-1">
             <ClusterCanvas />
+            <Walkthrough />
           </div>
           <SimTerminal />
         </div>
@@ -39,7 +39,11 @@ export function Workspace() {
         {/* Slide-in panels */}
         <EventsPanel />
         <DetailDrawer />
+        <ScenariosMenu />
+        <SettingsPanel />
       </div>
+
+      <OnboardingTour />
     </div>
   );
 }
