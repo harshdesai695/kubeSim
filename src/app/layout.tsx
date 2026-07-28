@@ -9,7 +9,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "kubeSim — Kubernetes Simulator",
+  title: "kubeSim Kubernetes Simulator",
   description:
     "An interactive, fully client-side Kubernetes simulator for learning and visualizing cluster behavior.",
 };

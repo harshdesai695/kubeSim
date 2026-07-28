@@ -1,11 +1,12 @@
 "use client";
 
-import { Bell, Boxes, Github, GraduationCap, Layers, RotateCcw, Settings2, TerminalSquare } from "lucide-react";
+import { Bell, Github, GraduationCap, Layers, RotateCcw, Settings2, TerminalSquare } from "lucide-react";
 import { useClusterStore } from "@/store/useClusterStore";
 import { useFlowStore } from "@/store/useFlowStore";
 import { useTerminalStore } from "@/store/useTerminalStore";
 import { useUIStore } from "@/store/useUIStore";
 import { resetRouting } from "@/lib/network";
+import { KubeLogo } from "@/components/layout/KubeLogo";
 
 export function TopNav() {
   const namespace = useClusterStore((s) => s.namespace);
@@ -54,8 +55,8 @@ export function TopNav() {
     <header className="glass z-20 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-panel-700 px-2 md:px-4">
       {/* Brand */}
       <div className="flex shrink-0 items-center gap-2.5">
-        <div className="grid h-8 w-8 place-items-center rounded-md bg-kube-500 shadow-glow">
-          <Boxes className="h-5 w-5 text-white" />
+        <div className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-kube-400 to-kube-600 shadow-glow">
+          <KubeLogo className="h-5 w-5 text-white" />
         </div>
         <div className="leading-none">
           <span className="text-lg font-bold tracking-tight text-white">
