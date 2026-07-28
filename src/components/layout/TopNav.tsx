@@ -3,6 +3,7 @@
 import { Bell, Boxes, Layers, RotateCcw, TerminalSquare } from "lucide-react";
 import { useClusterStore } from "@/store/useClusterStore";
 import { useFlowStore } from "@/store/useFlowStore";
+import { useTerminalStore } from "@/store/useTerminalStore";
 import { resetRouting } from "@/lib/network";
 
 export function TopNav() {
@@ -10,6 +11,8 @@ export function TopNav() {
   const namespaces = useClusterStore((s) => s.namespaces);
   const setNamespace = useClusterStore((s) => s.setNamespace);
   const createNamespace = useClusterStore((s) => s.createNamespace);
+  const timeScale = useClusterStore((s) => s.timeScale);
+  const setTimeScale = useClusterStore((s) => s.setTimeScale);
   const eventCount = useClusterStore((s) => s.events.length);
   const eventsOpen = useClusterStore((s) => s.ui.eventsOpen);
   const terminalOpen = useClusterStore((s) => s.ui.terminalOpen);
@@ -35,6 +38,7 @@ export function TopNav() {
   const handleReset = () => {
     resetCluster();
     useFlowStore.getState().clear();
+    useTerminalStore.getState().reset();
     resetRouting();
     pushEvent({
       type: "Normal",
@@ -80,6 +84,24 @@ export function TopNav() {
             </option>
           </select>
         </label>
+
+        {/* Simulated clock speed (drives CronJobs) */}
+        <div className="flex items-center gap-0.5 rounded-md border border-panel-700 bg-panel-850 p-0.5 text-[10px]">
+          {[1, 10, 60].map((s) => (
+            <button
+              key={s}
+              onClick={() => setTimeScale(s)}
+              title="Simulated clock speed"
+              className={`rounded px-1.5 py-1 font-semibold transition ${
+                timeScale === s
+                  ? "bg-kube-500/20 text-kube-400"
+                  : "text-slate-400 hover:bg-panel-700"
+              }`}
+            >
+              {s}x
+            </button>
+          ))}
+        </div>
 
         <NavButton
           active={workloadsOpen}

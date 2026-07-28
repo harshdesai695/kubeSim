@@ -9,8 +9,12 @@ import { useClusterStore } from "@/store/useClusterStore";
 import { useFlowStore } from "@/store/useFlowStore";
 import type {
   ConfigMap,
+  CronJob,
+  DaemonSet,
   Deployment,
+  HorizontalPodAutoscaler,
   Ingress,
+  Job,
   NetworkPolicy,
   ObjectMeta,
   PersistentVolume,
@@ -19,6 +23,7 @@ import type {
   ReplicaSet,
   Secret,
   Service,
+  StatefulSet,
   WorkerNode,
 } from "@/store/types";
 import { getControlPlaneComponent } from "@/lib/controlPlane";
@@ -26,6 +31,7 @@ import { formatAge } from "@/lib/time";
 import { generateLogs, simulateExec } from "@/lib/logs";
 import { computeEndpoints } from "@/lib/network";
 import { toBase64 } from "@/lib/storage";
+import { describeSchedule } from "@/lib/cron";
 import { phaseDotClass, phaseTextClass } from "@/lib/status";
 import { Gauge } from "@/components/canvas/Gauge";
 
@@ -52,6 +58,11 @@ export function DetailDrawer() {
   const persistentVolumeClaims = useClusterStore(
     (s) => s.persistentVolumeClaims,
   );
+  const statefulSets = useClusterStore((s) => s.statefulSets);
+  const daemonSets = useClusterStore((s) => s.daemonSets);
+  const jobs = useClusterStore((s) => s.jobs);
+  const cronJobs = useClusterStore((s) => s.cronJobs);
+  const hpas = useClusterStore((s) => s.hpas);
   const closeDrawer = useClusterStore((s) => s.closeDrawer);
 
   const node =
@@ -98,12 +109,37 @@ export function DetailDrawer() {
     selected?.kind === "PersistentVolumeClaim"
       ? persistentVolumeClaims.find((p) => p.metadata.uid === selected.id)
       : undefined;
+  const statefulSet =
+    selected?.kind === "StatefulSet"
+      ? statefulSets.find((x) => x.metadata.uid === selected.id)
+      : undefined;
+  const daemonSet =
+    selected?.kind === "DaemonSet"
+      ? daemonSets.find((x) => x.metadata.uid === selected.id)
+      : undefined;
+  const job =
+    selected?.kind === "Job"
+      ? jobs.find((x) => x.metadata.uid === selected.id)
+      : undefined;
+  const cronJob =
+    selected?.kind === "CronJob"
+      ? cronJobs.find((x) => x.metadata.uid === selected.id)
+      : undefined;
+  const hpa =
+    selected?.kind === "HorizontalPodAutoscaler"
+      ? hpas.find((x) => x.metadata.uid === selected.id)
+      : undefined;
   const cp = selected ? getControlPlaneComponent(selected.kind) : undefined;
 
   const activeMeta: ObjectMeta | undefined =
     pod?.metadata ??
     rs?.metadata ??
     deployment?.metadata ??
+    statefulSet?.metadata ??
+    daemonSet?.metadata ??
+    job?.metadata ??
+    cronJob?.metadata ??
+    hpa?.metadata ??
     service?.metadata ??
     ingress?.metadata ??
     networkPolicy?.metadata ??
@@ -120,23 +156,33 @@ export function DetailDrawer() {
         ? "ReplicaSet"
         : deployment
           ? "Deployment"
-          : service
-            ? "Service"
-            : ingress
-              ? "Ingress"
-              : networkPolicy
-                ? "NetworkPolicy"
-                : configMap
-                  ? "ConfigMap"
-                  : secret
-                    ? "Secret"
-                    : pv
-                      ? "PersistentVolume"
-                      : pvc
-                        ? "PersistentVolumeClaim"
-                        : cp
-                          ? "Control Plane"
-                          : selected?.kind ?? "Object";
+          : statefulSet
+            ? "StatefulSet"
+            : daemonSet
+              ? "DaemonSet"
+              : job
+                ? "Job"
+                : cronJob
+                  ? "CronJob"
+                  : hpa
+                    ? "HorizontalPodAutoscaler"
+                    : service
+                      ? "Service"
+                      : ingress
+                        ? "Ingress"
+                        : networkPolicy
+                          ? "NetworkPolicy"
+                          : configMap
+                            ? "ConfigMap"
+                            : secret
+                              ? "Secret"
+                              : pv
+                                ? "PersistentVolume"
+                                : pvc
+                                  ? "PersistentVolumeClaim"
+                                  : cp
+                                    ? "Control Plane"
+                                    : selected?.kind ?? "Object";
 
   return (
     <AnimatePresence>
@@ -179,6 +225,16 @@ export function DetailDrawer() {
                 <ReplicaSetDetail rs={rs} />
               ) : deployment ? (
                 <DeploymentDetail deployment={deployment} />
+              ) : statefulSet ? (
+                <StatefulSetDetail ss={statefulSet} />
+              ) : daemonSet ? (
+                <DaemonSetDetail ds={daemonSet} />
+              ) : job ? (
+                <JobDetail job={job} />
+              ) : cronJob ? (
+                <CronJobDetail cronJob={cronJob} />
+              ) : hpa ? (
+                <HPADetail hpa={hpa} />
               ) : service ? (
                 <ServiceDetail service={service} />
               ) : ingress ? (
@@ -1069,6 +1125,253 @@ function AnnotationsFooter({ meta }: { meta: ObjectMeta }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Advanced workload details                                           */
+/* ------------------------------------------------------------------ */
+
+function StatefulSetDetail({ ss }: { ss: StatefulSet }) {
+  const pods = useClusterStore(
+    useShallow((s) =>
+      s.pods
+        .filter((p) => p.metadata.ownerReferences?.[0]?.uid === ss.metadata.uid)
+        .sort((a, b) => (a.spec.ordinal ?? 0) - (b.spec.ordinal ?? 0)),
+    ),
+  );
+  return (
+    <div className="space-y-4 p-4">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+        <Field label="Ready" value={`${ss.status.readyReplicas}/${ss.spec.replicas}`} />
+        <Field label="Service" value={ss.spec.serviceName ?? "-"} />
+        <Field label="Image" value={ss.image} />
+        <Field
+          label="Storage"
+          value={
+            ss.spec.volumeClaimTemplate
+              ? `${ss.spec.volumeClaimTemplate.storage}Gi/pod`
+              : "none"
+          }
+        />
+      </div>
+      <div>
+        <p className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-500">
+          Ordered Pods (stable identity)
+        </p>
+        <div className="space-y-1">
+          {pods.map((p) => (
+            <div
+              key={p.metadata.uid}
+              className="flex items-center gap-2 rounded border border-panel-700 bg-panel-900 px-2 py-1 text-[10px]"
+            >
+              <span className="font-bold text-slate-300">
+                {p.spec.ordinal}
+              </span>
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${phaseDotClass(p.status.phase)}`}
+              />
+              <span className="min-w-0 flex-1 truncate text-slate-400">
+                {p.metadata.name}
+              </span>
+              {p.spec.pvcs?.[0] && (
+                <span className="truncate text-slate-600">
+                  {p.spec.pvcs[0]}
+                </span>
+              )}
+            </div>
+          ))}
+          {pods.length === 0 && (
+            <p className="text-[11px] text-slate-600">No pods.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DaemonSetDetail({ ds }: { ds: DaemonSet }) {
+  const pods = useClusterStore(
+    useShallow((s) =>
+      s.pods.filter((p) => p.metadata.ownerReferences?.[0]?.uid === ds.metadata.uid),
+    ),
+  );
+  return (
+    <div className="space-y-4 p-4">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+        <Field
+          label="Scheduled"
+          value={`${ds.status.numberReady}/${ds.status.desiredNumberScheduled}`}
+        />
+        <Field label="Image" value={ds.image} />
+      </div>
+      <p className="text-[10px] text-slate-600">
+        One pod runs on every eligible node. Adding a node auto-spawns a pod;
+        removing a node cleans it up.
+      </p>
+      <div>
+        <p className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-500">
+          Pods per node
+        </p>
+        <div className="space-y-1">
+          {pods.map((p) => (
+            <div
+              key={p.metadata.uid}
+              className="flex items-center gap-2 rounded border border-panel-700 bg-panel-900 px-2 py-1 text-[10px]"
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${phaseDotClass(p.status.phase)}`} />
+              <span className="min-w-0 flex-1 truncate text-slate-400">
+                {p.spec.nodeName ?? "-"}
+              </span>
+              <span className="text-slate-600">{p.status.phase}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function JobDetail({ job }: { job: Job }) {
+  const forceFailJob = useClusterStore((s) => s.forceFailJob);
+  const pct = Math.min(
+    100,
+    Math.round((job.status.succeeded / job.spec.completions) * 100),
+  );
+  return (
+    <div className="space-y-4 p-4">
+      <div className="rounded-lg border border-panel-700 bg-panel-900 p-3 text-center">
+        <p className="text-2xl font-bold text-white">
+          {job.status.succeeded}
+          <span className="text-sm text-slate-500"> / {job.spec.completions}</span>
+        </p>
+        <p className="text-[10px] uppercase tracking-wider text-slate-500">
+          completions · {job.status.phase}
+        </p>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-panel-700">
+          <div
+            className="h-full rounded-full bg-status-running transition-all"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-x-3 text-[11px]">
+        <Field label="Parallelism" value={String(job.spec.parallelism)} />
+        <Field label="Active" value={String(job.status.active)} />
+        <Field label="Failed" value={String(job.status.failed)} />
+      </div>
+      <button
+        onClick={() => forceFailJob(job.metadata.uid)}
+        className={`w-full rounded-md border px-3 py-2 text-xs font-semibold transition ${
+          job.forceFail
+            ? "border-status-failed/50 bg-status-failed/15 text-status-failed"
+            : "border-panel-700 bg-panel-850 text-slate-300 hover:bg-panel-700"
+        }`}
+      >
+        {job.forceFail ? "Forced-failure ON (retrying)" : "Force failure (test backoffLimit)"}
+      </button>
+      <p className="text-[10px] text-slate-600">
+        backoffLimit {job.spec.backoffLimit}: retries until failures exceed the
+        limit, then the Job is marked Failed.
+      </p>
+    </div>
+  );
+}
+
+function CronJobDetail({ cronJob: cj }: { cronJob: CronJob }) {
+  const simClock = useClusterStore((s) => s.simClock);
+  const countdown = Math.max(0, Math.round((cj.nextRunAt - simClock) / 1000));
+  return (
+    <div className="space-y-4 p-4">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+        <Field label="Schedule" value={cj.spec.schedule} />
+        <Field label="Cadence" value={describeSchedule(cj.spec.schedule)} />
+        <Field label="Image" value={cj.spec.image} />
+        <Field label="Next run" value={`${countdown}s (sim)`} />
+      </div>
+      <div>
+        <p className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-500">
+          Run History
+        </p>
+        <div className="space-y-1">
+          {cj.history.length === 0 ? (
+            <p className="text-[11px] text-slate-600">
+              No runs yet — increase the clock speed (top bar) to accelerate.
+            </p>
+          ) : (
+            cj.history.map((run, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-2 rounded border border-panel-700 bg-panel-900 px-2 py-1 text-[10px]"
+              >
+                <span className="min-w-0 flex-1 truncate text-slate-400">
+                  {run.jobName}
+                </span>
+                <span className="text-slate-600">
+                  {new Date(run.time).toLocaleTimeString()}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HPADetail({ hpa }: { hpa: HorizontalPodAutoscaler }) {
+  const setHpaLoad = useClusterStore((s) => s.setHpaLoad);
+  const over =
+    hpa.status.currentCPUUtilizationPercentage >
+    hpa.spec.targetCPUUtilizationPercentage;
+  return (
+    <div className="space-y-4 p-4">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+        <Field
+          label="Target"
+          value={`${hpa.spec.scaleTargetRef.kind}/${hpa.spec.scaleTargetRef.name}`}
+        />
+        <Field
+          label="Replicas"
+          value={`${hpa.status.currentReplicas} (${hpa.spec.minReplicas}-${hpa.spec.maxReplicas})`}
+        />
+      </div>
+
+      <div className="rounded-lg border border-panel-700 bg-panel-900 p-3 text-center">
+        <p
+          className={`text-2xl font-bold ${
+            over ? "text-status-failed" : "text-status-running"
+          }`}
+        >
+          {hpa.status.currentCPUUtilizationPercentage}%
+          <span className="text-sm text-slate-500">
+            {" "}
+            / {hpa.spec.targetCPUUtilizationPercentage}%
+          </span>
+        </p>
+        <p className="text-[10px] uppercase tracking-wider text-slate-500">
+          current CPU / target
+        </p>
+      </div>
+
+      <div>
+        <p className="mb-1 text-[10px] uppercase tracking-wider text-slate-500">
+          Load Simulator
+        </p>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          value={hpa.load}
+          onChange={(e) => setHpaLoad(hpa.metadata.uid, Number(e.target.value))}
+          className="w-full accent-kube-500"
+        />
+        <p className="mt-1 text-[10px] text-slate-600">
+          Drag to simulate CPU load. When it crosses the target, the HPA scales
+          the workload (respecting min/max).
+        </p>
+      </div>
     </div>
   );
 }

@@ -129,6 +129,7 @@ export interface MakePodInput {
   configMaps?: string[];
   secrets?: string[];
   pvcs?: string[];
+  ordinal?: number;
 }
 
 /** Create a fresh Pending pod (no node assigned yet). */
@@ -150,6 +151,7 @@ export function makePod(input: MakePodInput): Pod {
       configMaps: input.configMaps?.length ? input.configMaps : undefined,
       secrets: input.secrets?.length ? input.secrets : undefined,
       pvcs: input.pvcs?.length ? input.pvcs : undefined,
+      ordinal: input.ordinal,
     },
     status: {
       phase: "Pending",

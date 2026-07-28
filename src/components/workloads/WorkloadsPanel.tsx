@@ -3,9 +3,12 @@
 import { useState } from "react";
 import {
   Activity,
+  Blocks,
   Boxes,
+  Clock,
   Database,
   FileText,
+  Gauge as GaugeIcon,
   HardDrive,
   Layers,
   Lock,
@@ -13,8 +16,10 @@ import {
   Network,
   Plus,
   RefreshCw,
+  Repeat,
   Rocket,
   Send,
+  Shield,
   ShieldBan,
   Skull,
   Trash2,
@@ -27,8 +32,12 @@ import { useClusterStore } from "@/store/useClusterStore";
 import { useFlowStore } from "@/store/useFlowStore";
 import type {
   ConfigMap,
+  CronJob,
+  DaemonSet,
   Deployment,
+  HorizontalPodAutoscaler,
   Ingress,
+  Job,
   NetworkPolicy,
   PersistentVolume,
   PersistentVolumeClaim,
@@ -38,14 +47,20 @@ import type {
   SecretType,
   Service,
   ServiceType,
+  StatefulSet,
 } from "@/store/types";
 import { phaseTextClass } from "@/lib/status";
 import { ACCESS_MODES, STORAGE_CLASSES } from "@/lib/storage";
+import { describeSchedule } from "@/lib/cron";
 
 type CreateKind =
   | "Deployment"
   | "ReplicaSet"
   | "Pod"
+  | "StatefulSet"
+  | "DaemonSet"
+  | "Job"
+  | "CronJob"
   | "Service"
   | "Ingress"
   | "NetworkPolicy"
@@ -92,6 +107,11 @@ export function WorkloadsPanel() {
   const namespace = useClusterStore((s) => s.namespace);
   const deployments = useClusterStore((s) => s.deployments);
   const replicaSets = useClusterStore((s) => s.replicaSets);
+  const statefulSets = useClusterStore((s) => s.statefulSets);
+  const daemonSets = useClusterStore((s) => s.daemonSets);
+  const jobs = useClusterStore((s) => s.jobs);
+  const cronJobs = useClusterStore((s) => s.cronJobs);
+  const hpas = useClusterStore((s) => s.hpas);
   const services = useClusterStore((s) => s.services);
   const ingresses = useClusterStore((s) => s.ingresses);
   const networkPolicies = useClusterStore((s) => s.networkPolicies);
@@ -109,6 +129,13 @@ export function WorkloadsPanel() {
   if (!open) return null;
 
   const nsDeployments = deployments.filter((d) => inNs(d, namespace));
+  const nsStatefulSets = statefulSets.filter((s) => inNs(s, namespace));
+  const nsDaemonSets = daemonSets.filter((d) => inNs(d, namespace));
+  const nsJobs = jobs.filter(
+    (j) => inNs(j, namespace) && !j.metadata.ownerReferences?.length,
+  );
+  const nsCronJobs = cronJobs.filter((c) => inNs(c, namespace));
+  const nsHpas = hpas.filter((h) => inNs(h, namespace));
   const nsServices = services.filter((s) => inNs(s, namespace));
   const nsIngresses = ingresses.filter((i) => inNs(i, namespace));
   const nsNetpol = networkPolicies.filter((n) => inNs(n, namespace));
@@ -127,6 +154,11 @@ export function WorkloadsPanel() {
   const empty =
     nsDeployments.length === 0 &&
     standaloneRs.length === 0 &&
+    nsStatefulSets.length === 0 &&
+    nsDaemonSets.length === 0 &&
+    nsJobs.length === 0 &&
+    nsCronJobs.length === 0 &&
+    nsHpas.length === 0 &&
     nsServices.length === 0 &&
     nsIngresses.length === 0 &&
     nsNetpol.length === 0 &&
@@ -191,6 +223,46 @@ export function WorkloadsPanel() {
         {standaloneRs.map((rs) => (
           <ReplicaSetRow key={rs.metadata.uid} rs={rs} />
         ))}
+
+        {nsStatefulSets.length > 0 && (
+          <Section label="StatefulSets">
+            {nsStatefulSets.map((ss) => (
+              <StatefulSetRow key={ss.metadata.uid} ss={ss} />
+            ))}
+          </Section>
+        )}
+
+        {nsDaemonSets.length > 0 && (
+          <Section label="DaemonSets">
+            {nsDaemonSets.map((ds) => (
+              <DaemonSetRow key={ds.metadata.uid} ds={ds} />
+            ))}
+          </Section>
+        )}
+
+        {nsJobs.length > 0 && (
+          <Section label="Jobs">
+            {nsJobs.map((j) => (
+              <JobRow key={j.metadata.uid} job={j} />
+            ))}
+          </Section>
+        )}
+
+        {nsCronJobs.length > 0 && (
+          <Section label="CronJobs">
+            {nsCronJobs.map((c) => (
+              <CronJobRow key={c.metadata.uid} cronJob={c} />
+            ))}
+          </Section>
+        )}
+
+        {nsHpas.length > 0 && (
+          <Section label="Autoscalers">
+            {nsHpas.map((h) => (
+              <HPARow key={h.metadata.uid} hpa={h} />
+            ))}
+          </Section>
+        )}
 
         {nsServices.length > 0 && (
           <Section label="Services">
@@ -305,6 +377,10 @@ function CreateForm({ onDone }: { onDone: () => void }) {
   const [refConfigMaps, setRefConfigMaps] = useState<string[]>([]);
   const [refSecrets, setRefSecrets] = useState<string[]>([]);
   const [refPvcs, setRefPvcs] = useState<string[]>([]);
+  const [completions, setCompletions] = useState(3);
+  const [parallelism, setParallelism] = useState(1);
+  const [backoffLimit, setBackoffLimit] = useState(2);
+  const [schedule, setSchedule] = useState("*/5 * * * *");
 
   const toggle = (
     list: string[],
@@ -340,6 +416,40 @@ function CreateForm({ onDone }: { onDone: () => void }) {
           name: name.trim() || undefined,
           image: image.trim() || "nginx:1.25",
           refs,
+        });
+        break;
+      case "StatefulSet":
+        store.createStatefulSet({
+          name: name.trim() || undefined,
+          image: image.trim() || "nginx:1.25",
+          replicas,
+          storage: size,
+          storageClassName: storageClass,
+        });
+        break;
+      case "DaemonSet":
+        store.createDaemonSet({
+          name: name.trim() || undefined,
+          image: image.trim() || "nginx:1.25",
+        });
+        break;
+      case "Job":
+        store.createJob({
+          name: name.trim() || undefined,
+          image: image.trim() || "busybox:1.36",
+          completions,
+          parallelism,
+          backoffLimit,
+        });
+        break;
+      case "CronJob":
+        store.createCronJob({
+          name: name.trim() || undefined,
+          image: image.trim() || "busybox:1.36",
+          schedule,
+          completions,
+          parallelism,
+          backoffLimit,
         });
         break;
       case "Service":
@@ -408,6 +518,10 @@ function CreateForm({ onDone }: { onDone: () => void }) {
     "Deployment",
     "ReplicaSet",
     "Pod",
+    "StatefulSet",
+    "DaemonSet",
+    "Job",
+    "CronJob",
     "Service",
     "Ingress",
     "NetworkPolicy",
@@ -418,6 +532,14 @@ function CreateForm({ onDone }: { onDone: () => void }) {
   ];
 
   const workloadKind =
+    kind === "Deployment" ||
+    kind === "ReplicaSet" ||
+    kind === "Pod" ||
+    kind === "StatefulSet" ||
+    kind === "DaemonSet" ||
+    kind === "Job" ||
+    kind === "CronJob";
+  const refKind =
     kind === "Deployment" || kind === "ReplicaSet" || kind === "Pod";
 
   return (
@@ -454,14 +576,45 @@ function CreateForm({ onDone }: { onDone: () => void }) {
         />
       )}
 
-      {(kind === "Deployment" || kind === "ReplicaSet") && (
+      {(kind === "Deployment" ||
+        kind === "ReplicaSet" ||
+        kind === "StatefulSet") && (
         <Labeled label="replicas">
           <Stepper value={replicas} onChange={setReplicas} min={0} max={12} />
         </Labeled>
       )}
 
+      {kind === "StatefulSet" && (
+        <Labeled label="storage (Gi)">
+          <NumberInput value={size} onChange={setSize} />
+        </Labeled>
+      )}
+
+      {kind === "CronJob" && (
+        <input
+          value={schedule}
+          onChange={(e) => setSchedule(e.target.value)}
+          placeholder="schedule (*/5 * * * *)"
+          className={inputClass}
+        />
+      )}
+
+      {(kind === "Job" || kind === "CronJob") && (
+        <div className="grid grid-cols-3 gap-2">
+          <Labeled label="compl.">
+            <NumberInput value={completions} onChange={setCompletions} />
+          </Labeled>
+          <Labeled label="paral.">
+            <NumberInput value={parallelism} onChange={setParallelism} />
+          </Labeled>
+          <Labeled label="backoff">
+            <NumberInput value={backoffLimit} onChange={setBackoffLimit} />
+          </Labeled>
+        </div>
+      )}
+
       {/* Workload consumption refs */}
-      {workloadKind &&
+      {refKind &&
         (nsConfigMaps.length > 0 ||
           nsSecrets.length > 0 ||
           nsPVCs.length > 0) && (
@@ -780,6 +933,7 @@ function DeploymentRow({
             </span>
           )}
         </div>
+        <AttachHPAButton kind="Deployment" name={d.metadata.name} uid={d.metadata.uid} />
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -1219,6 +1373,285 @@ function PVRow({ pv }: { pv: PersistentVolume }) {
       >
         <Trash2 className="h-3 w-3" />
       </button>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Advanced workload rows                                              */
+/* ------------------------------------------------------------------ */
+
+function AttachHPAButton({
+  kind,
+  name,
+  uid,
+}: {
+  kind: "Deployment" | "ReplicaSet" | "StatefulSet";
+  name: string;
+  uid: string;
+}) {
+  const createHPA = useClusterStore((s) => s.createHPA);
+  const hasHpa = useClusterStore((s) =>
+    s.hpas.some((h) => h.spec.scaleTargetRef.uid === uid),
+  );
+  if (hasHpa) return null;
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        createHPA({
+          targetKind: kind,
+          targetName: name,
+          targetUid: uid,
+          minReplicas: 2,
+          maxReplicas: 8,
+          targetCPUUtilizationPercentage: 70,
+        });
+      }}
+      title="Attach HorizontalPodAutoscaler"
+      className="shrink-0 rounded p-0.5 text-slate-600 transition hover:text-kube-400"
+    >
+      <GaugeIcon className="h-3.5 w-3.5" />
+    </button>
+  );
+}
+
+function StatefulSetRow({ ss }: { ss: StatefulSet }) {
+  const scaleStatefulSet = useClusterStore((s) => s.scaleStatefulSet);
+  const deleteStatefulSet = useClusterStore((s) => s.deleteStatefulSet);
+  const openDrawer = useClusterStore((s) => s.openDrawer);
+
+  return (
+    <div className="rounded-lg border border-panel-700 bg-panel-850">
+      <div
+        className="flex cursor-pointer items-center gap-2 border-b border-panel-700 px-2.5 py-2"
+        onClick={() =>
+          openDrawer({ kind: "StatefulSet", name: ss.metadata.name, id: ss.metadata.uid })
+        }
+      >
+        <Blocks className="h-3.5 w-3.5" style={{ color: ss.color }} />
+        <span className="min-w-0 flex-1 truncate text-xs font-bold text-white">
+          {ss.metadata.name}
+        </span>
+        <AttachHPAButton kind="StatefulSet" name={ss.metadata.name} uid={ss.metadata.uid} />
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            deleteStatefulSet(ss.metadata.uid);
+          }}
+          className="shrink-0 rounded p-0.5 text-slate-600 hover:text-status-failed"
+          title="Delete StatefulSet"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="flex items-center justify-between px-2.5 py-2 text-[11px]">
+        <span className="text-slate-500">
+          Ready{" "}
+          <span className="font-semibold text-status-running">
+            {ss.status.readyReplicas}
+          </span>
+          /{ss.spec.replicas}
+          {ss.spec.volumeClaimTemplate && (
+            <span className="ml-1 text-slate-600">· PVC/pod</span>
+          )}
+        </span>
+        <Stepper
+          value={ss.spec.replicas}
+          onChange={(v) => scaleStatefulSet(ss.metadata.uid, v)}
+          min={0}
+          max={10}
+        />
+      </div>
+    </div>
+  );
+}
+
+function DaemonSetRow({ ds }: { ds: DaemonSet }) {
+  const deleteDaemonSet = useClusterStore((s) => s.deleteDaemonSet);
+  const openDrawer = useClusterStore((s) => s.openDrawer);
+  return (
+    <div className="flex items-center gap-1.5 rounded-md border border-panel-700 bg-panel-850 px-2 py-1.5">
+      <Shield className="h-3.5 w-3.5 text-fuchsia-400" />
+      <span
+        className="min-w-0 flex-1 cursor-pointer truncate text-xs font-semibold text-white"
+        onClick={() =>
+          openDrawer({ kind: "DaemonSet", name: ds.metadata.name, id: ds.metadata.uid })
+        }
+      >
+        {ds.metadata.name}
+      </span>
+      <span className="text-[9px] text-slate-500">
+        {ds.status.numberReady}/{ds.status.desiredNumberScheduled} nodes
+      </span>
+      <button
+        onClick={() => deleteDaemonSet(ds.metadata.uid)}
+        className="rounded p-0.5 text-slate-600 hover:text-status-failed"
+        title="Delete DaemonSet"
+      >
+        <Trash2 className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
+
+function JobRow({ job }: { job: Job }) {
+  const forceFailJob = useClusterStore((s) => s.forceFailJob);
+  const deleteJob = useClusterStore((s) => s.deleteJob);
+  const openDrawer = useClusterStore((s) => s.openDrawer);
+  const pct = Math.min(
+    100,
+    Math.round((job.status.succeeded / job.spec.completions) * 100),
+  );
+  const badge =
+    job.status.phase === "Complete"
+      ? "text-status-running"
+      : job.status.phase === "Failed"
+        ? "text-status-failed"
+        : "text-status-pending";
+
+  return (
+    <div className="rounded-md border border-panel-700 bg-panel-850 px-2 py-1.5">
+      <div className="flex items-center gap-1.5">
+        <Repeat className="h-3.5 w-3.5 text-emerald-400" />
+        <span
+          className="min-w-0 flex-1 cursor-pointer truncate text-xs font-semibold text-white"
+          onClick={() =>
+            openDrawer({ kind: "Job", name: job.metadata.name, id: job.metadata.uid })
+          }
+        >
+          {job.metadata.name}
+        </span>
+        <span className={`text-[9px] font-semibold ${badge}`}>
+          {job.status.phase}
+        </span>
+        <button
+          onClick={() => forceFailJob(job.metadata.uid)}
+          title="Toggle forced-failure mode"
+          className={`rounded p-0.5 ${
+            job.forceFail ? "text-status-failed" : "text-slate-600 hover:text-status-failed"
+          }`}
+        >
+          <Skull className="h-3 w-3" />
+        </button>
+        <button
+          onClick={() => deleteJob(job.metadata.uid)}
+          className="rounded p-0.5 text-slate-600 hover:text-status-failed"
+          title="Delete Job"
+        >
+          <Trash2 className="h-3 w-3" />
+        </button>
+      </div>
+      <div className="mt-1 flex items-center gap-1.5">
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-panel-700">
+          <div
+            className={`h-full rounded-full ${
+              job.status.phase === "Failed"
+                ? "bg-status-failed"
+                : "bg-status-running"
+            } transition-all`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <span className="text-[9px] tabular-nums text-slate-500">
+          {job.status.succeeded}/{job.spec.completions}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function CronJobRow({ cronJob: cj }: { cronJob: CronJob }) {
+  const deleteCronJob = useClusterStore((s) => s.deleteCronJob);
+  const openDrawer = useClusterStore((s) => s.openDrawer);
+  const simClock = useClusterStore((s) => s.simClock);
+  const countdown = Math.max(0, Math.round((cj.nextRunAt - simClock) / 1000));
+
+  return (
+    <div className="rounded-md border border-panel-700 bg-panel-850 px-2 py-1.5">
+      <div className="flex items-center gap-1.5">
+        <Clock className="h-3.5 w-3.5 text-amber-400" />
+        <span
+          className="min-w-0 flex-1 cursor-pointer truncate text-xs font-semibold text-white"
+          onClick={() =>
+            openDrawer({ kind: "CronJob", name: cj.metadata.name, id: cj.metadata.uid })
+          }
+        >
+          {cj.metadata.name}
+        </span>
+        <button
+          onClick={() => deleteCronJob(cj.metadata.uid)}
+          className="rounded p-0.5 text-slate-600 hover:text-status-failed"
+          title="Delete CronJob"
+        >
+          <Trash2 className="h-3 w-3" />
+        </button>
+      </div>
+      <div className="mt-0.5 flex items-center justify-between text-[9px] text-slate-500">
+        <span>
+          {cj.spec.schedule} ({describeSchedule(cj.spec.schedule)})
+        </span>
+        <span>next in {countdown}s (sim)</span>
+      </div>
+    </div>
+  );
+}
+
+function HPARow({ hpa }: { hpa: HorizontalPodAutoscaler }) {
+  const setHpaLoad = useClusterStore((s) => s.setHpaLoad);
+  const deleteHPA = useClusterStore((s) => s.deleteHPA);
+  const openDrawer = useClusterStore((s) => s.openDrawer);
+  const over =
+    hpa.status.currentCPUUtilizationPercentage >
+    hpa.spec.targetCPUUtilizationPercentage;
+
+  return (
+    <div className="rounded-md border border-panel-700 bg-panel-850 px-2 py-1.5">
+      <div className="flex items-center gap-1.5">
+        <GaugeIcon className="h-3.5 w-3.5 text-kube-400" />
+        <span
+          className="min-w-0 flex-1 cursor-pointer truncate text-xs font-semibold text-white"
+          onClick={() =>
+            openDrawer({
+              kind: "HorizontalPodAutoscaler",
+              name: hpa.metadata.name,
+              id: hpa.metadata.uid,
+            })
+          }
+        >
+          {hpa.spec.scaleTargetRef.name}
+        </span>
+        <span
+          className={`text-[9px] font-semibold tabular-nums ${
+            over ? "text-status-failed" : "text-status-running"
+          }`}
+        >
+          {hpa.status.currentCPUUtilizationPercentage}%/
+          {hpa.spec.targetCPUUtilizationPercentage}%
+        </span>
+        <button
+          onClick={() => deleteHPA(hpa.metadata.uid)}
+          className="rounded p-0.5 text-slate-600 hover:text-status-failed"
+          title="Delete HPA"
+        >
+          <Trash2 className="h-3 w-3" />
+        </button>
+      </div>
+      <div className="mt-1 flex items-center gap-1.5">
+        <span className="text-[9px] text-slate-500">load</span>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          value={hpa.load}
+          onChange={(e) => setHpaLoad(hpa.metadata.uid, Number(e.target.value))}
+          className="h-1 flex-1 accent-kube-500"
+        />
+        <span className="w-14 text-right text-[9px] tabular-nums text-slate-500">
+          {hpa.status.currentReplicas} ({hpa.spec.minReplicas}-
+          {hpa.spec.maxReplicas})
+        </span>
+      </div>
     </div>
   );
 }

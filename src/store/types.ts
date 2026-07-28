@@ -105,14 +105,20 @@ export interface Pod {
     configMaps?: string[];
     secrets?: string[];
     pvcs?: string[];
+    /** StatefulSet ordinal index (stable identity). */
+    ordinal?: number;
   };
   status: {
     phase: PodPhase;
     podIP?: string;
     restartCount: number;
+    /** Simulated CPU utilization % (driven by HPA load slider). */
+    cpu?: number;
   };
   /** Accent color inherited from an owning ReplicaSet (grouping cue). */
   ownerColor?: string;
+  /** Job pods: epoch ms at which simulated work completes. */
+  completeAt?: number;
   createdAt: number; // epoch ms — drives AGE
   phaseSince: number; // epoch ms the pod entered its current phase
 }
@@ -189,6 +195,108 @@ export interface Deployment {
   revisions: DeploymentRevision[];
   rollout?: DeploymentRollout;
   color: string;
+  createdAt: number;
+}
+
+/* ------------------------------------------------------------------ */
+/* Advanced workloads — reference doc 3.4–3.7, 7.1                     */
+/* ------------------------------------------------------------------ */
+
+export interface StatefulSet {
+  metadata: ObjectMeta;
+  spec: {
+    serviceName?: string;
+    replicas: number;
+    selector: Record<string, string>;
+    template: PodTemplate;
+    volumeClaimTemplate?: {
+      name: string;
+      storage: number; // GiB
+      storageClassName?: string;
+    };
+  };
+  status: { replicas: number; readyReplicas: number };
+  image: string;
+  color: string;
+  createdAt: number;
+}
+
+export interface DaemonSet {
+  metadata: ObjectMeta;
+  spec: {
+    selector: Record<string, string>;
+    template: PodTemplate;
+    nodeSelector?: Record<string, string>;
+  };
+  status: { desiredNumberScheduled: number; numberReady: number };
+  image: string;
+  color: string;
+  createdAt: number;
+}
+
+export type JobPhase = "Running" | "Complete" | "Failed";
+
+export interface Job {
+  metadata: ObjectMeta; // ownerReferences → CronJob when scheduled
+  spec: {
+    completions: number;
+    parallelism: number;
+    backoffLimit: number;
+    image: string;
+    labels: Record<string, string>;
+  };
+  status: {
+    succeeded: number;
+    failed: number;
+    active: number;
+    phase: JobPhase;
+  };
+  /** When true, completing pods count as failures (retry demo). */
+  forceFail?: boolean;
+  color: string;
+  createdAt: number;
+}
+
+export interface CronJobRun {
+  jobName: string;
+  time: number; // sim clock ms
+  result: "Created" | "Complete" | "Failed";
+}
+
+export interface CronJob {
+  metadata: ObjectMeta;
+  spec: {
+    schedule: string; // cron expression
+    completions: number;
+    parallelism: number;
+    backoffLimit: number;
+    image: string;
+  };
+  status: { lastScheduleTime?: number };
+  /** Next fire time on the simulated clock (ms). */
+  nextRunAt: number;
+  history: CronJobRun[];
+  color: string;
+  createdAt: number;
+}
+
+export type HPATargetKind = "Deployment" | "ReplicaSet" | "StatefulSet";
+
+export interface HorizontalPodAutoscaler {
+  metadata: ObjectMeta;
+  spec: {
+    scaleTargetRef: { kind: HPATargetKind; name: string; uid: string };
+    minReplicas: number;
+    maxReplicas: number;
+    targetCPUUtilizationPercentage: number;
+  };
+  status: {
+    currentReplicas: number;
+    currentCPUUtilizationPercentage: number;
+  };
+  /** Manual load slider (0–100%) simulating pod CPU. */
+  load: number;
+  lastScaleAt: number;
   createdAt: number;
 }
 

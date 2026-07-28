@@ -8,6 +8,7 @@ import {
   Boxes,
   Radio,
   Server,
+  Shield,
   Trash2,
 } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
@@ -39,6 +40,13 @@ export function WorkerNodeCard({ data }: NodeProps) {
     ),
   );
   const [confirming, setConfirming] = useState(false);
+
+  const daemonPods = pods.filter(
+    (p) => p.metadata.ownerReferences?.[0]?.kind === "DaemonSet",
+  );
+  const regularPods = pods.filter(
+    (p) => p.metadata.ownerReferences?.[0]?.kind !== "DaemonSet",
+  );
 
   const ready = node.status === "Ready";
   const labelChips = Object.entries(node.labels).slice(0, 3);
@@ -122,9 +130,25 @@ export function WorkerNodeCard({ data }: NodeProps) {
           </span>
         </div>
 
+        {/* DaemonSet pods — pinned badges */}
+        {daemonPods.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {daemonPods.map((pod) => (
+              <span
+                key={pod.metadata.uid}
+                title={pod.metadata.name}
+                className="flex items-center gap-1 rounded border border-fuchsia-500/40 bg-fuchsia-500/10 px-1.5 py-0.5 text-[9px] text-fuchsia-300"
+              >
+                <Shield className="h-2.5 w-2.5" />
+                {pod.metadata.ownerReferences?.[0]?.name}
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Pods */}
         <div className="rounded-lg border border-dashed border-panel-700 bg-panel-900/60 p-1.5">
-          {pods.length === 0 ? (
+          {regularPods.length === 0 ? (
             <div className="grid place-items-center px-2 py-2 text-center">
               <Boxes className="mb-1 h-4 w-4 text-slate-700" />
               <span className="text-[10px] text-slate-600">
@@ -134,7 +158,7 @@ export function WorkerNodeCard({ data }: NodeProps) {
           ) : (
             <div className="flex flex-col gap-1">
               <AnimatePresence mode="popLayout">
-                {pods.map((pod) => (
+                {regularPods.map((pod) => (
                   <PodCard key={pod.metadata.uid} pod={pod} />
                 ))}
               </AnimatePresence>
