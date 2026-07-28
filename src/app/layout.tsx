@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -12,6 +12,12 @@ export const metadata: Metadata = {
   title: "kubeSim — Kubernetes Simulator",
   description:
     "An interactive, fully client-side Kubernetes simulator for learning and visualizing cluster behavior.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#0a0e14",
 };
 
 export default function RootLayout({

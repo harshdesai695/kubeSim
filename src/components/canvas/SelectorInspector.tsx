@@ -25,7 +25,7 @@ export function SelectorInspector() {
           value={query}
           onChange={(e) => setSelectorQuery(e.target.value)}
           placeholder="selector inspector: app=frontend"
-          className="w-52 bg-transparent text-[11px] text-slate-200 outline-none placeholder:text-slate-600"
+          className="w-36 bg-transparent text-[11px] text-slate-200 outline-none placeholder:text-slate-600 sm:w-52"
         />
         {query && (
           <button

@@ -118,7 +118,7 @@ export function SimTerminal() {
   if (!open) return null;
 
   return (
-    <div className="glass flex h-56 shrink-0 flex-col border-t border-panel-700">
+    <div className="glass flex h-48 shrink-0 flex-col border-t border-panel-700 md:h-56">
       <div className="flex h-9 shrink-0 items-center justify-between border-b border-panel-700 px-3">
         <div className="flex items-center gap-2 text-xs font-semibold text-slate-300">
           <TerminalSquare className="h-4 w-4 text-kube-400" />

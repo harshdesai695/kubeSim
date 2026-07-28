@@ -46,7 +46,7 @@ export function AddNodeControl() {
   return (
     <div className="absolute right-4 top-4 z-10">
       {open ? (
-        <div className="w-72 rounded-xl border border-panel-700 bg-panel-850/95 p-3 shadow-2xl backdrop-blur">
+        <div className="w-72 max-w-[80vw] rounded-xl border border-panel-700 bg-panel-850/95 p-3 shadow-2xl backdrop-blur">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-widest text-kube-400">
               Add Worker Node

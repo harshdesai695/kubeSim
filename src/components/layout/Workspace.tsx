@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { TopNav } from "@/components/layout/TopNav";
 import { ClusterCanvas } from "@/components/canvas/ClusterCanvas";
 import { SimTerminal } from "@/components/terminal/SimTerminal";
@@ -12,11 +13,20 @@ import { OnboardingTour } from "@/components/system/OnboardingTour";
 import { ScenariosMenu } from "@/components/scenarios/ScenariosMenu";
 import { Walkthrough } from "@/components/scenarios/Walkthrough";
 import { SettingsPanel } from "@/components/settings/SettingsPanel";
+import { useClusterStore } from "@/store/useClusterStore";
 
 /**
  * Workspace — the top-level "control room" shell.
  */
 export function Workspace() {
+  // Collapse the docked panels on small screens for a usable mobile layout.
+  useEffect(() => {
+    if (typeof window === "undefined" || window.innerWidth >= 768) return;
+    const ui = useClusterStore.getState().ui;
+    if (ui.workloadsOpen) useClusterStore.getState().toggleWorkloads();
+    if (ui.terminalOpen) useClusterStore.getState().toggleTerminal();
+  }, []);
+
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-panel-950">
       <ReconcileEngine />

@@ -51,9 +51,9 @@ export function TopNav() {
   };
 
   return (
-    <header className="glass z-20 flex h-14 shrink-0 items-center justify-between border-b border-panel-700 px-4">
+    <header className="glass z-20 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-panel-700 px-2 md:px-4">
       {/* Brand */}
-      <div className="flex items-center gap-2.5">
+      <div className="flex shrink-0 items-center gap-2.5">
         <div className="grid h-8 w-8 place-items-center rounded-md bg-kube-500 shadow-glow">
           <Boxes className="h-5 w-5 text-white" />
         </div>
@@ -61,7 +61,7 @@ export function TopNav() {
           <span className="text-lg font-bold tracking-tight text-white">
             kube<span className="text-kube-400">Sim</span>
           </span>
-          <p className="mt-0.5 text-[10px] uppercase tracking-widest text-slate-500">
+          <p className="mt-0.5 hidden text-[10px] uppercase tracking-widest text-slate-500 sm:block">
             Kubernetes Simulator
           </p>
         </div>
@@ -78,10 +78,10 @@ export function TopNav() {
       </div>
 
       {/* Controls */}
-      <div className="flex items-center gap-2">
-        {/* Namespace selector (stub) */}
+      <div className="no-scrollbar flex min-w-0 items-center gap-1.5 overflow-x-auto md:gap-2 [&>*]:shrink-0">
+        {/* Namespace selector */}
         <label className="flex items-center gap-2 rounded-md border border-panel-700 bg-panel-850 px-2.5 py-1.5 text-xs">
-          <span className="text-slate-500">namespace</span>
+          <span className="hidden text-slate-500 sm:inline">namespace</span>
           <select
             value={namespace}
             onChange={(e) => handleNamespaceChange(e.target.value)}
@@ -158,7 +158,7 @@ export function TopNav() {
           className="flex items-center gap-1.5 rounded-md border border-status-failed/40 bg-status-failed/10 px-2.5 py-1.5 text-xs font-semibold text-status-failed transition hover:bg-status-failed/20"
         >
           <RotateCcw className="h-4 w-4" />
-          Restart Cluster
+          <span className="hidden sm:inline">Restart Cluster</span>
         </button>
       </div>
     </header>
@@ -184,7 +184,7 @@ function NavButton({ active, onClick, icon, label, badge }: NavButtonProps) {
       }`}
     >
       {icon}
-      {label}
+      <span className="hidden md:inline">{label}</span>
       {badge !== undefined && badge > 0 && (
         <span className="ml-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-kube-500 px-1 text-[10px] text-white">
           {badge > 99 ? "99+" : badge}

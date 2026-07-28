@@ -169,163 +169,172 @@ export function WorkloadsPanel() {
     standalonePods.length === 0;
 
   return (
-    <aside className="glass z-10 flex w-80 shrink-0 flex-col border-r border-panel-700">
-      <div className="flex h-11 shrink-0 items-center justify-between border-b border-panel-700 px-3">
-        <div className="flex items-center gap-2 text-sm font-bold text-white">
-          <Layers className="h-4 w-4 text-kube-400" />
-          Workloads
-          <span className="rounded bg-panel-700 px-1 text-[9px] font-normal text-slate-400">
-            {namespace}
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setFormOpen((v) => !v)}
-            className="flex items-center gap-1 rounded-md border border-kube-500/50 bg-kube-500/15 px-2 py-1 text-[11px] font-semibold text-kube-400 transition hover:bg-kube-500/25"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            New
-          </button>
-          <button
-            onClick={toggleWorkloads}
-            className="rounded p-1 text-slate-400 transition hover:bg-panel-700 hover:text-slate-200"
-            aria-label="Collapse workloads"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-
-      {formOpen && <CreateForm onDone={() => setFormOpen(false)} />}
-
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
-        {empty && !formOpen && (
-          <div className="mt-12 flex flex-col items-center gap-2 text-center text-slate-600">
-            <Boxes className="h-6 w-6" />
-            <p className="text-xs">No objects in {namespace}.</p>
-            <p className="max-w-[14rem] text-[11px] text-slate-700">
-              Click <span className="text-kube-400">New</span> to create objects
-              in this namespace.
-            </p>
+    <>
+      {/* Mobile backdrop (docked panel becomes an overlay on small screens) */}
+      <div
+        className="absolute inset-0 z-20 bg-black/40 md:hidden"
+        onClick={toggleWorkloads}
+      />
+      <aside className="glass absolute inset-y-0 left-0 z-30 flex w-80 max-w-[85vw] shrink-0 flex-col border-r border-panel-700 md:relative md:z-10 md:max-w-none">
+        <div className="flex h-11 shrink-0 items-center justify-between border-b border-panel-700 px-3">
+          <div className="flex items-center gap-2 text-sm font-bold text-white">
+            <Layers className="h-4 w-4 text-kube-400" />
+            Workloads
+            <span className="rounded bg-panel-700 px-1 text-[9px] font-normal text-slate-400">
+              {namespace}
+            </span>
           </div>
-        )}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setFormOpen((v) => !v)}
+              className="flex items-center gap-1 rounded-md border border-kube-500/50 bg-kube-500/15 px-2 py-1 text-[11px] font-semibold text-kube-400 transition hover:bg-kube-500/25"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              New
+            </button>
+            <button
+              onClick={toggleWorkloads}
+              className="rounded p-1 text-slate-400 transition hover:bg-panel-700 hover:text-slate-200"
+              aria-label="Collapse workloads"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
 
-        {nsDeployments.map((d) => (
-          <DeploymentRow
-            key={d.metadata.uid}
-            deployment={d}
-            replicaSets={replicaSets.filter((rs) =>
-              rs.metadata.ownerReferences?.some((o) => o.uid === d.metadata.uid),
-            )}
-          />
-        ))}
+        {formOpen && <CreateForm onDone={() => setFormOpen(false)} />}
 
-        {standaloneRs.map((rs) => (
-          <ReplicaSetRow key={rs.metadata.uid} rs={rs} />
-        ))}
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+          {empty && !formOpen && (
+            <div className="mt-12 flex flex-col items-center gap-2 text-center text-slate-600">
+              <Boxes className="h-6 w-6" />
+              <p className="text-xs">No objects in {namespace}.</p>
+              <p className="max-w-[14rem] text-[11px] text-slate-700">
+                Click <span className="text-kube-400">New</span> to create objects
+                in this namespace.
+              </p>
+            </div>
+          )}
 
-        {nsStatefulSets.length > 0 && (
-          <Section label="StatefulSets">
-            {nsStatefulSets.map((ss) => (
-              <StatefulSetRow key={ss.metadata.uid} ss={ss} />
-            ))}
-          </Section>
-        )}
+          {nsDeployments.map((d) => (
+            <DeploymentRow
+              key={d.metadata.uid}
+              deployment={d}
+              replicaSets={replicaSets.filter((rs) =>
+                rs.metadata.ownerReferences?.some(
+                  (o) => o.uid === d.metadata.uid,
+                ),
+              )}
+            />
+          ))}
 
-        {nsDaemonSets.length > 0 && (
-          <Section label="DaemonSets">
-            {nsDaemonSets.map((ds) => (
-              <DaemonSetRow key={ds.metadata.uid} ds={ds} />
-            ))}
-          </Section>
-        )}
+          {standaloneRs.map((rs) => (
+            <ReplicaSetRow key={rs.metadata.uid} rs={rs} />
+          ))}
 
-        {nsJobs.length > 0 && (
-          <Section label="Jobs">
-            {nsJobs.map((j) => (
-              <JobRow key={j.metadata.uid} job={j} />
-            ))}
-          </Section>
-        )}
+          {nsStatefulSets.length > 0 && (
+            <Section label="StatefulSets">
+              {nsStatefulSets.map((ss) => (
+                <StatefulSetRow key={ss.metadata.uid} ss={ss} />
+              ))}
+            </Section>
+          )}
 
-        {nsCronJobs.length > 0 && (
-          <Section label="CronJobs">
-            {nsCronJobs.map((c) => (
-              <CronJobRow key={c.metadata.uid} cronJob={c} />
-            ))}
-          </Section>
-        )}
+          {nsDaemonSets.length > 0 && (
+            <Section label="DaemonSets">
+              {nsDaemonSets.map((ds) => (
+                <DaemonSetRow key={ds.metadata.uid} ds={ds} />
+              ))}
+            </Section>
+          )}
 
-        {nsHpas.length > 0 && (
-          <Section label="Autoscalers">
-            {nsHpas.map((h) => (
-              <HPARow key={h.metadata.uid} hpa={h} />
-            ))}
-          </Section>
-        )}
+          {nsJobs.length > 0 && (
+            <Section label="Jobs">
+              {nsJobs.map((j) => (
+                <JobRow key={j.metadata.uid} job={j} />
+              ))}
+            </Section>
+          )}
 
-        {nsServices.length > 0 && (
-          <Section label="Services">
-            {nsServices.map((svc) => (
-              <ServiceRow key={svc.metadata.uid} service={svc} />
-            ))}
-          </Section>
-        )}
+          {nsCronJobs.length > 0 && (
+            <Section label="CronJobs">
+              {nsCronJobs.map((c) => (
+                <CronJobRow key={c.metadata.uid} cronJob={c} />
+              ))}
+            </Section>
+          )}
 
-        {nsIngresses.length > 0 && (
-          <Section label="Ingresses">
-            {nsIngresses.map((ing) => (
-              <IngressRow key={ing.metadata.uid} ingress={ing} />
-            ))}
-          </Section>
-        )}
+          {nsHpas.length > 0 && (
+            <Section label="Autoscalers">
+              {nsHpas.map((h) => (
+                <HPARow key={h.metadata.uid} hpa={h} />
+              ))}
+            </Section>
+          )}
 
-        {nsNetpol.length > 0 && (
-          <Section label="Network Policies">
-            {nsNetpol.map((np) => (
-              <NetworkPolicyRow key={np.metadata.uid} np={np} />
-            ))}
-          </Section>
-        )}
+          {nsServices.length > 0 && (
+            <Section label="Services">
+              {nsServices.map((svc) => (
+                <ServiceRow key={svc.metadata.uid} service={svc} />
+              ))}
+            </Section>
+          )}
 
-        {nsConfigMaps.length > 0 && (
-          <Section label="ConfigMaps">
-            {nsConfigMaps.map((cm) => (
-              <ConfigMapRow key={cm.metadata.uid} cm={cm} />
-            ))}
-          </Section>
-        )}
+          {nsIngresses.length > 0 && (
+            <Section label="Ingresses">
+              {nsIngresses.map((ing) => (
+                <IngressRow key={ing.metadata.uid} ingress={ing} />
+              ))}
+            </Section>
+          )}
 
-        {nsSecrets.length > 0 && (
-          <Section label="Secrets">
-            {nsSecrets.map((sec) => (
-              <SecretRow key={sec.metadata.uid} secret={sec} />
-            ))}
-          </Section>
-        )}
+          {nsNetpol.length > 0 && (
+            <Section label="Network Policies">
+              {nsNetpol.map((np) => (
+                <NetworkPolicyRow key={np.metadata.uid} np={np} />
+              ))}
+            </Section>
+          )}
 
-        {(nsPVCs.length > 0 || persistentVolumes.length > 0) && (
-          <Section label="Storage">
-            {nsPVCs.map((pvc) => (
-              <PVCRow key={pvc.metadata.uid} pvc={pvc} />
-            ))}
-            {persistentVolumes.map((pv) => (
-              <PVRow key={pv.metadata.uid} pv={pv} />
-            ))}
-          </Section>
-        )}
+          {nsConfigMaps.length > 0 && (
+            <Section label="ConfigMaps">
+              {nsConfigMaps.map((cm) => (
+                <ConfigMapRow key={cm.metadata.uid} cm={cm} />
+              ))}
+            </Section>
+          )}
 
-        {standalonePods.length > 0 && (
-          <Section label="Standalone Pods">
-            {standalonePods.map((p) => (
-              <PodRow key={p.metadata.uid} pod={p} />
-            ))}
-          </Section>
-        )}
-      </div>
+          {nsSecrets.length > 0 && (
+            <Section label="Secrets">
+              {nsSecrets.map((sec) => (
+                <SecretRow key={sec.metadata.uid} secret={sec} />
+              ))}
+            </Section>
+          )}
 
-      <RecentRequests />
-    </aside>
+          {(nsPVCs.length > 0 || persistentVolumes.length > 0) && (
+            <Section label="Storage">
+              {nsPVCs.map((pvc) => (
+                <PVCRow key={pvc.metadata.uid} pvc={pvc} />
+              ))}
+              {persistentVolumes.map((pv) => (
+                <PVRow key={pv.metadata.uid} pv={pv} />
+              ))}
+            </Section>
+          )}
+
+          {standalonePods.length > 0 && (
+            <Section label="Standalone Pods">
+              {standalonePods.map((p) => (
+                <PodRow key={p.metadata.uid} pod={p} />
+              ))}
+            </Section>
+          )}
+        </div>
+
+        <RecentRequests />
+      </aside>
+    </>
   );
 }
 
