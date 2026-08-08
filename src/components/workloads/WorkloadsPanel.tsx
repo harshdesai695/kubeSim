@@ -3,14 +3,19 @@
 import { useState } from "react";
 import {
   Activity,
+  ArrowUpNarrowWide,
   Blocks,
   Boxes,
+  Camera,
   Clock,
   Database,
+  Eye,
   FileText,
   Gauge as GaugeIcon,
   HardDrive,
+  KeyRound,
   Layers,
+  Link2,
   Lock,
   Minus,
   Network,
@@ -18,12 +23,17 @@ import {
   RefreshCw,
   Repeat,
   Rocket,
+  Scale,
   Send,
   Shield,
+  ShieldAlert,
   ShieldBan,
+  ShieldCheck,
   Skull,
+  SlidersHorizontal,
   Trash2,
   Undo2,
+  UserCog,
   Waypoints,
   X,
   Zap,
@@ -39,16 +49,21 @@ import type {
   Ingress,
   Job,
   NetworkPolicy,
+  ObjectMeta,
   PersistentVolume,
   PersistentVolumeClaim,
   Pod,
   ReplicaSet,
+  RoleBinding,
   Secret,
   SecretType,
   Service,
+  ServiceAccount,
   ServiceType,
   StatefulSet,
+  SubjectKind,
 } from "@/store/types";
+import type { RbacSubjectSelection } from "@/store/useClusterStore";
 import { phaseTextClass } from "@/lib/status";
 import { ACCESS_MODES, STORAGE_CLASSES } from "@/lib/storage";
 import { describeSchedule } from "@/lib/cron";
@@ -67,7 +82,14 @@ type CreateKind =
   | "ConfigMap"
   | "Secret"
   | "PVC"
-  | "PV";
+  | "PV"
+  | "ServiceAccount"
+  | "Role"
+  | "RoleBinding"
+  | "ResourceQuota"
+  | "LimitRange"
+  | "PriorityClass"
+  | "PodDisruptionBudget";
 
 function parseSelector(str: string): Record<string, string> {
   const out: Record<string, string> = {};
@@ -98,6 +120,27 @@ function parseKeyValues(text: string): Record<string, string> {
 const inNs = (obj: { metadata: { namespace: string } }, ns: string) =>
   obj.metadata.namespace === ns;
 
+function parseCsv(str: string): string[] {
+  return str
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function parseNumberMap(str: string): Record<string, number> {
+  const out: Record<string, number> = {};
+  str
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .forEach((p) => {
+      const [k, v] = p.split("=");
+      const n = Number(v);
+      if (k && Number.isFinite(n)) out[k.trim()] = n;
+    });
+  return out;
+}
+
 /**
  * WorkloadsPanel — left dock to create/manage workloads, networking, config and
  * storage objects (reference doc §3–6), scoped to the active namespace.
@@ -122,6 +165,17 @@ export function WorkloadsPanel() {
   );
   const persistentVolumes = useClusterStore((s) => s.persistentVolumes);
   const pods = useClusterStore((s) => s.pods);
+  const serviceAccounts = useClusterStore((s) => s.serviceAccounts);
+  const roles = useClusterStore((s) => s.roles);
+  const clusterRoles = useClusterStore((s) => s.clusterRoles);
+  const roleBindings = useClusterStore((s) => s.roleBindings);
+  const clusterRoleBindings = useClusterStore((s) => s.clusterRoleBindings);
+  const resourceQuotas = useClusterStore((s) => s.resourceQuotas);
+  const limitRanges = useClusterStore((s) => s.limitRanges);
+  const priorityClasses = useClusterStore((s) => s.priorityClasses);
+  const podDisruptionBudgets = useClusterStore((s) => s.podDisruptionBudgets);
+  const rbacSubject = useClusterStore((s) => s.ui.rbacSubject);
+  const setRbacSubject = useClusterStore((s) => s.setRbacSubject);
   const toggleWorkloads = useClusterStore((s) => s.toggleWorkloads);
 
   const [formOpen, setFormOpen] = useState(false);
@@ -142,6 +196,12 @@ export function WorkloadsPanel() {
   const nsConfigMaps = configMaps.filter((c) => inNs(c, namespace));
   const nsSecrets = secrets.filter((c) => inNs(c, namespace));
   const nsPVCs = persistentVolumeClaims.filter((c) => inNs(c, namespace));
+  const nsServiceAccounts = serviceAccounts.filter((c) => inNs(c, namespace));
+  const nsRoles = roles.filter((c) => inNs(c, namespace));
+  const nsRoleBindings = roleBindings.filter((c) => inNs(c, namespace));
+  const nsResourceQuotas = resourceQuotas.filter((c) => inNs(c, namespace));
+  const nsLimitRanges = limitRanges.filter((c) => inNs(c, namespace));
+  const nsPDBs = podDisruptionBudgets.filter((c) => inNs(c, namespace));
   const standaloneRs = replicaSets.filter(
     (rs) =>
       inNs(rs, namespace) &&
@@ -330,6 +390,134 @@ export function WorkloadsPanel() {
               ))}
             </Section>
           )}
+
+          {(nsServiceAccounts.length > 0 ||
+            nsRoles.length > 0 ||
+            clusterRoles.length > 0 ||
+            nsRoleBindings.length > 0 ||
+            clusterRoleBindings.length > 0 ||
+            nsResourceQuotas.length > 0 ||
+            nsLimitRanges.length > 0) && (
+            <Section label="RBAC & Security">
+              <InspectAsPicker
+                serviceAccounts={nsServiceAccounts}
+                roleBindings={[...nsRoleBindings, ...clusterRoleBindings]}
+                subject={rbacSubject}
+                onSelect={setRbacSubject}
+                namespace={namespace}
+              />
+              {nsServiceAccounts.map((sa) => (
+                <RbacRow
+                  key={sa.metadata.uid}
+                  kind="ServiceAccount"
+                  meta={sa.metadata}
+                  onDelete={() =>
+                    useClusterStore
+                      .getState()
+                      .deleteServiceAccount(sa.metadata.uid)
+                  }
+                />
+              ))}
+              {nsRoles.map((r) => (
+                <RbacRow
+                  key={r.metadata.uid}
+                  kind="Role"
+                  meta={r.metadata}
+                  onDelete={() =>
+                    useClusterStore.getState().deleteRole(r.metadata.uid, false)
+                  }
+                />
+              ))}
+              {clusterRoles.map((r) => (
+                <RbacRow
+                  key={r.metadata.uid}
+                  kind="ClusterRole"
+                  meta={r.metadata}
+                  onDelete={() =>
+                    useClusterStore.getState().deleteRole(r.metadata.uid, true)
+                  }
+                />
+              ))}
+              {nsRoleBindings.map((rb) => (
+                <RbacRow
+                  key={rb.metadata.uid}
+                  kind="RoleBinding"
+                  meta={rb.metadata}
+                  onDelete={() =>
+                    useClusterStore
+                      .getState()
+                      .deleteRoleBinding(rb.metadata.uid, false)
+                  }
+                />
+              ))}
+              {clusterRoleBindings.map((rb) => (
+                <RbacRow
+                  key={rb.metadata.uid}
+                  kind="ClusterRoleBinding"
+                  meta={rb.metadata}
+                  onDelete={() =>
+                    useClusterStore
+                      .getState()
+                      .deleteRoleBinding(rb.metadata.uid, true)
+                  }
+                />
+              ))}
+              {nsResourceQuotas.map((q) => (
+                <RbacRow
+                  key={q.metadata.uid}
+                  kind="ResourceQuota"
+                  meta={q.metadata}
+                  onDelete={() =>
+                    useClusterStore
+                      .getState()
+                      .deleteResourceQuota(q.metadata.uid)
+                  }
+                />
+              ))}
+              {nsLimitRanges.map((l) => (
+                <RbacRow
+                  key={l.metadata.uid}
+                  kind="LimitRange"
+                  meta={l.metadata}
+                  onDelete={() =>
+                    useClusterStore.getState().deleteLimitRange(l.metadata.uid)
+                  }
+                />
+              ))}
+            </Section>
+          )}
+
+          {(priorityClasses.length > 0 || nsPDBs.length > 0) && (
+            <Section label="Scheduling Policy">
+              {priorityClasses.map((pc) => (
+                <RbacRow
+                  key={pc.metadata.uid}
+                  kind="PriorityClass"
+                  meta={pc.metadata}
+                  onDelete={() =>
+                    useClusterStore
+                      .getState()
+                      .deletePriorityClass(pc.metadata.uid)
+                  }
+                />
+              ))}
+              {nsPDBs.map((pdb) => (
+                <RbacRow
+                  key={pdb.metadata.uid}
+                  kind="PodDisruptionBudget"
+                  meta={pdb.metadata}
+                  onDelete={() =>
+                    useClusterStore
+                      .getState()
+                      .deletePodDisruptionBudget(pdb.metadata.uid)
+                  }
+                />
+              ))}
+            </Section>
+          )}
+
+          <ExtensibilitySection namespace={namespace} />
+          <StorageAutoscaleSection namespace={namespace} />
         </div>
 
         <RecentRequests />
@@ -390,6 +578,24 @@ function CreateForm({ onDone }: { onDone: () => void }) {
   const [parallelism, setParallelism] = useState(1);
   const [backoffLimit, setBackoffLimit] = useState(2);
   const [schedule, setSchedule] = useState("*/5 * * * *");
+  // RBAC / admission fields
+  const [ruleResources, setRuleResources] = useState("pods,services");
+  const [ruleVerbs, setRuleVerbs] = useState("get,list,watch");
+  const [clusterScope, setClusterScope] = useState(false);
+  const [subjectKind, setSubjectKind] = useState<SubjectKind>("User");
+  const [subjectName, setSubjectName] = useState("");
+  const [roleRefName, setRoleRefName] = useState("");
+  const [quotaHard, setQuotaHard] = useState("pods=5,services=3");
+  // Phase 9 scheduling fields
+  const [reqCpu, setReqCpu] = useState(0);
+  const [reqMem, setReqMem] = useState(0);
+  const [podNodeSelector, setPodNodeSelector] = useState("");
+  const [podPriorityClass, setPodPriorityClass] = useState("");
+  const [podToleration, setPodToleration] = useState("");
+  const [pcValue, setPcValue] = useState(1000);
+  const [pdbSelector, setPdbSelector] = useState("app=");
+  const [pdbMinAvailable, setPdbMinAvailable] = useState(1);
+  const priorityClasses = store.priorityClasses;
 
   const toggle = (
     list: string[],
@@ -425,6 +631,19 @@ function CreateForm({ onDone }: { onDone: () => void }) {
           name: name.trim() || undefined,
           image: image.trim() || "nginx:1.25",
           refs,
+          scheduling: {
+            requests:
+              reqCpu > 0 || reqMem > 0
+                ? { cpu: reqCpu || undefined, memory: reqMem || undefined }
+                : undefined,
+            nodeSelector: podNodeSelector.trim()
+              ? parseSelector(podNodeSelector)
+              : undefined,
+            priorityClassName: podPriorityClass || undefined,
+            tolerations: podToleration.trim()
+              ? [{ key: podToleration.trim(), operator: "Exists" }]
+              : undefined,
+          },
         });
         break;
       case "StatefulSet":
@@ -515,6 +734,75 @@ function CreateForm({ onDone }: { onDone: () => void }) {
           storageClassName: storageClass,
         });
         break;
+      case "ServiceAccount":
+        store.createServiceAccount(name.trim() || `sa-${Date.now()}`);
+        break;
+      case "Role":
+        store.createRole({
+          name: name.trim() || undefined,
+          cluster: clusterScope,
+          rules: [
+            {
+              apiGroups: [""],
+              resources: parseCsv(ruleResources),
+              verbs: parseCsv(ruleVerbs),
+            },
+          ],
+        });
+        break;
+      case "RoleBinding": {
+        const sName = subjectName.trim();
+        const rName = roleRefName.trim();
+        if (!sName || !rName) return;
+        store.createRoleBinding({
+          name: name.trim() || undefined,
+          cluster: clusterScope,
+          subjects: [
+            {
+              kind: subjectKind,
+              name: sName,
+              namespace:
+                subjectKind === "ServiceAccount" ? namespace : undefined,
+            },
+          ],
+          roleRef: {
+            kind: clusterScope ? "ClusterRole" : "Role",
+            name: rName,
+          },
+        });
+        break;
+      }
+      case "ResourceQuota":
+        store.createResourceQuota({
+          name: name.trim() || undefined,
+          hard: parseNumberMap(quotaHard),
+        });
+        break;
+      case "LimitRange":
+        store.createLimitRange({
+          name: name.trim() || undefined,
+          limits: [
+            {
+              type: "Container",
+              default: { cpu: "500m", memory: "512Mi" },
+              defaultRequest: { cpu: "250m", memory: "256Mi" },
+            },
+          ],
+        });
+        break;
+      case "PriorityClass":
+        store.createPriorityClass({
+          name: name.trim() || undefined,
+          value: pcValue,
+        });
+        break;
+      case "PodDisruptionBudget":
+        store.createPodDisruptionBudget({
+          name: name.trim() || undefined,
+          selector: parseSelector(pdbSelector),
+          minAvailable: pdbMinAvailable,
+        });
+        break;
     }
     setName("");
     setRefConfigMaps([]);
@@ -538,6 +826,13 @@ function CreateForm({ onDone }: { onDone: () => void }) {
     "Secret",
     "PVC",
     "PV",
+    "ServiceAccount",
+    "Role",
+    "RoleBinding",
+    "ResourceQuota",
+    "LimitRange",
+    "PriorityClass",
+    "PodDisruptionBudget",
   ];
 
   const workloadKind =
@@ -813,6 +1108,159 @@ function CreateForm({ onDone }: { onDone: () => void }) {
         </>
       )}
 
+      {(kind === "Role" || kind === "RoleBinding") && (
+        <label className="flex items-center gap-2 text-[11px] text-slate-400">
+          <input
+            type="checkbox"
+            checked={clusterScope}
+            onChange={(e) => setClusterScope(e.target.checked)}
+            className="accent-kube-500"
+          />
+          cluster-scoped ({kind === "Role" ? "ClusterRole" : "ClusterRoleBinding"})
+        </label>
+      )}
+
+      {kind === "Role" && (
+        <>
+          <input
+            value={ruleResources}
+            onChange={(e) => setRuleResources(e.target.value)}
+            placeholder="resources (pods,services)"
+            className={inputClass}
+          />
+          <input
+            value={ruleVerbs}
+            onChange={(e) => setRuleVerbs(e.target.value)}
+            placeholder="verbs (get,list,watch)"
+            className={inputClass}
+          />
+        </>
+      )}
+
+      {kind === "RoleBinding" && (
+        <>
+          <select
+            value={subjectKind}
+            onChange={(e) => setSubjectKind(e.target.value as SubjectKind)}
+            className={inputClass}
+          >
+            {(["User", "Group", "ServiceAccount"] as SubjectKind[]).map((k) => (
+              <option key={k} value={k} className="bg-panel-850">
+                {k}
+              </option>
+            ))}
+          </select>
+          <input
+            value={subjectName}
+            onChange={(e) => setSubjectName(e.target.value)}
+            placeholder="subject name (e.g. alice)"
+            className={inputClass}
+          />
+          <input
+            value={roleRefName}
+            onChange={(e) => setRoleRefName(e.target.value)}
+            placeholder={`${clusterScope ? "ClusterRole" : "Role"} name`}
+            className={inputClass}
+          />
+        </>
+      )}
+
+      {kind === "ResourceQuota" && (
+        <input
+          value={quotaHard}
+          onChange={(e) => setQuotaHard(e.target.value)}
+          placeholder="hard (pods=5,services=3)"
+          className={inputClass}
+        />
+      )}
+
+      {kind === "LimitRange" && (
+        <p className="rounded-md border border-panel-700 bg-panel-900 p-2 text-[10px] text-slate-500">
+          Creates a container LimitRange with default request 250m/256Mi and
+          limit 500m/512Mi.
+        </p>
+      )}
+
+      {kind === "Pod" && (
+        <div className="space-y-2 rounded-md border border-panel-700 bg-panel-900 p-2">
+          <p className="text-[9px] uppercase tracking-wider text-slate-500">
+            Scheduling (Phase 9)
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <Labeled label="cpu req">
+              <input
+                type="number"
+                step={0.25}
+                min={0}
+                value={reqCpu}
+                onChange={(e) => setReqCpu(Number(e.target.value))}
+                className="w-16 rounded-md border border-panel-700 bg-panel-900 px-2 py-1 text-xs text-slate-200 outline-none focus:border-kube-500"
+              />
+            </Labeled>
+            <Labeled label="mem req (Gi)">
+              <input
+                type="number"
+                step={0.25}
+                min={0}
+                value={reqMem}
+                onChange={(e) => setReqMem(Number(e.target.value))}
+                className="w-16 rounded-md border border-panel-700 bg-panel-900 px-2 py-1 text-xs text-slate-200 outline-none focus:border-kube-500"
+              />
+            </Labeled>
+          </div>
+          <input
+            value={podNodeSelector}
+            onChange={(e) => setPodNodeSelector(e.target.value)}
+            placeholder="nodeSelector (disktype=ssd)"
+            className={inputClass}
+          />
+          <input
+            value={podToleration}
+            onChange={(e) => setPodToleration(e.target.value)}
+            placeholder="tolerate taint key (e.g. gpu)"
+            className={inputClass}
+          />
+          <select
+            value={podPriorityClass}
+            onChange={(e) => setPodPriorityClass(e.target.value)}
+            className={inputClass}
+          >
+            <option value="" className="bg-panel-850">
+              priorityClass: none
+            </option>
+            {priorityClasses.map((pc) => (
+              <option
+                key={pc.metadata.uid}
+                value={pc.metadata.name}
+                className="bg-panel-850"
+              >
+                {pc.metadata.name} ({pc.value})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {kind === "PriorityClass" && (
+        <Labeled label="value">
+          <NumberInput value={pcValue} onChange={setPcValue} />
+        </Labeled>
+      )}
+
+      {kind === "PodDisruptionBudget" && (
+        <>
+          <input
+            value={pdbSelector}
+            onChange={(e) => setPdbSelector(e.target.value)}
+            placeholder="selector (app=web)"
+            className={inputClass}
+          />
+          <Labeled label="minAvailable">
+            <NumberInput value={pdbMinAvailable} onChange={setPdbMinAvailable} />
+          </Labeled>
+        </>
+      )}
+
       <button
         onClick={submit}
         className="flex w-full items-center justify-center gap-1.5 rounded-md bg-kube-500 px-3 py-2 text-xs font-semibold text-white shadow-glow transition hover:bg-kube-400"
@@ -899,6 +1347,446 @@ function NumberInput({
 /* ------------------------------------------------------------------ */
 /* Rows                                                                */
 /* ------------------------------------------------------------------ */
+
+const RBAC_ICONS: Record<string, typeof Shield> = {
+  ServiceAccount: UserCog,
+  Role: KeyRound,
+  ClusterRole: KeyRound,
+  RoleBinding: Link2,
+  ClusterRoleBinding: Link2,
+  ResourceQuota: Scale,
+  LimitRange: SlidersHorizontal,
+  PriorityClass: ArrowUpNarrowWide,
+  PodDisruptionBudget: ShieldAlert,
+};
+
+function RbacRow({
+  kind,
+  meta,
+  onDelete,
+}: {
+  kind: string;
+  meta: ObjectMeta;
+  onDelete: () => void;
+}) {
+  const openDrawer = useClusterStore((s) => s.openDrawer);
+  const Icon = RBAC_ICONS[kind] ?? ShieldCheck;
+  return (
+    <div className="group flex items-center gap-2 rounded-md border border-panel-700 bg-panel-900 px-2 py-1.5">
+      <Icon className="h-3.5 w-3.5 shrink-0 text-kube-400" />
+      <button
+        onClick={() => openDrawer({ kind, name: meta.name, id: meta.uid })}
+        className="min-w-0 flex-1 text-left"
+      >
+        <p className="truncate text-[11px] font-semibold text-slate-200">
+          {meta.name}
+        </p>
+        <p className="text-[9px] uppercase tracking-wider text-slate-500">
+          {kind}
+        </p>
+      </button>
+      <button
+        onClick={onDelete}
+        className="rounded p-1 text-slate-600 opacity-0 transition hover:text-status-failed group-hover:opacity-100"
+        aria-label={`Delete ${kind}`}
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function InspectAsPicker({
+  serviceAccounts,
+  roleBindings,
+  subject,
+  onSelect,
+  namespace,
+}: {
+  serviceAccounts: ServiceAccount[];
+  roleBindings: RoleBinding[];
+  subject: RbacSubjectSelection | null;
+  onSelect: (s: RbacSubjectSelection | null) => void;
+  namespace: string;
+}) {
+  // Build a list of selectable subjects: bound users/groups + service accounts.
+  const options: RbacSubjectSelection[] = [];
+  const seen = new Set<string>();
+  const add = (s: RbacSubjectSelection) => {
+    const id = `${s.kind}:${s.namespace ?? ""}:${s.name}`;
+    if (!seen.has(id)) {
+      seen.add(id);
+      options.push(s);
+    }
+  };
+  roleBindings.forEach((rb) =>
+    rb.subjects.forEach((s) =>
+      add({ kind: s.kind, name: s.name, namespace: s.namespace }),
+    ),
+  );
+  serviceAccounts.forEach((sa) =>
+    add({
+      kind: "ServiceAccount",
+      name: sa.metadata.name,
+      namespace: namespace,
+    }),
+  );
+
+  const value = subject
+    ? `${subject.kind}:${subject.namespace ?? ""}:${subject.name}`
+    : "";
+
+  return (
+    <div className="mb-1 rounded-md border border-kube-500/30 bg-kube-500/5 p-2">
+      <p className="mb-1 flex items-center gap-1 text-[9px] uppercase tracking-wider text-kube-300">
+        <Eye className="h-3 w-3" />
+        Inspect as (permission overlay)
+      </p>
+      <select
+        value={value}
+        onChange={(e) => {
+          const opt = options.find(
+            (o) => `${o.kind}:${o.namespace ?? ""}:${o.name}` === e.target.value,
+          );
+          onSelect(opt ?? null);
+        }}
+        className={inputClass}
+      >
+        <option value="" className="bg-panel-850">
+          — cluster-admin (no overlay) —
+        </option>
+        {options.map((o) => (
+          <option
+            key={`${o.kind}:${o.namespace ?? ""}:${o.name}`}
+            value={`${o.kind}:${o.namespace ?? ""}:${o.name}`}
+            className="bg-panel-850"
+          >
+            {o.kind === "ServiceAccount"
+              ? `sa: ${o.namespace}/${o.name}`
+              : `${o.kind.toLowerCase()}: ${o.name}`}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Extensibility — CRDs, Custom Resources & sample operator (Phase 10) */
+/* ------------------------------------------------------------------ */
+
+function StorageAutoscaleSection({ namespace }: { namespace: string }) {
+  const vpas = useClusterStore((s) => s.vpas);
+  const volumeSnapshots = useClusterStore((s) => s.volumeSnapshots);
+  const deployments = useClusterStore((s) => s.deployments);
+  const statefulSets = useClusterStore((s) => s.statefulSets);
+  const createVPA = useClusterStore((s) => s.createVPA);
+  const deleteVPA = useClusterStore((s) => s.deleteVPA);
+  const restoreVolumeSnapshot = useClusterStore((s) => s.restoreVolumeSnapshot);
+  const deleteVolumeSnapshot = useClusterStore((s) => s.deleteVolumeSnapshot);
+
+  const nsVpas = vpas.filter((v) => v.metadata.namespace === namespace);
+  const nsSnaps = volumeSnapshots.filter((v) => v.metadata.namespace === namespace);
+  const targets = [
+    ...deployments
+      .filter((d) => d.metadata.namespace === namespace)
+      .map((d) => ({ kind: "Deployment" as const, name: d.metadata.name })),
+    ...statefulSets
+      .filter((s) => s.metadata.namespace === namespace)
+      .map((s) => ({ kind: "StatefulSet" as const, name: s.metadata.name })),
+  ];
+  const [target, setTarget] = useState("");
+
+  if (nsVpas.length === 0 && nsSnaps.length === 0 && targets.length === 0)
+    return null;
+
+  return (
+    <Section label="Storage & Autoscaling">
+      {targets.length > 0 && (
+        <div className="flex items-center gap-1.5">
+          <select
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
+            className={inputClass}
+          >
+            <option value="" className="bg-panel-850">
+              VPA target…
+            </option>
+            {targets.map((t) => (
+              <option
+                key={`${t.kind}/${t.name}`}
+                value={`${t.kind}/${t.name}`}
+                className="bg-panel-850"
+              >
+                {t.kind}/{t.name}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => {
+              if (!target) return;
+              const [kind, name] = target.split("/");
+              createVPA({
+                targetKind: kind as "Deployment" | "StatefulSet",
+                targetName: name,
+                mode: "Auto",
+              });
+              setTarget("");
+            }}
+            disabled={!target}
+            className="shrink-0 rounded-md border border-kube-500/50 bg-kube-500/15 px-2 py-1.5 text-[10px] font-semibold text-kube-400 transition hover:bg-kube-500/25 disabled:opacity-40"
+          >
+            + VPA
+          </button>
+        </div>
+      )}
+
+      {nsVpas.map((vpa) => (
+        <div
+          key={vpa.metadata.uid}
+          className="flex items-center gap-2 rounded-md border border-panel-700 bg-panel-900 px-2 py-1.5"
+        >
+          <ArrowUpNarrowWide className="h-3.5 w-3.5 shrink-0 text-kube-400" />
+          <button
+            onClick={() =>
+              useClusterStore.getState().openDrawer({
+                kind: "VerticalPodAutoscaler",
+                name: vpa.metadata.name,
+                id: vpa.metadata.uid,
+              })
+            }
+            className="min-w-0 flex-1 text-left"
+          >
+            <p className="truncate text-[11px] font-semibold text-slate-200">
+              {vpa.spec.targetRef.kind}/{vpa.spec.targetRef.name}
+            </p>
+            <p className="text-[9px] text-slate-500">
+              rec cpu={vpa.status.recommendedCpu} mem=
+              {vpa.status.recommendedMemory}Gi · {vpa.spec.mode}
+            </p>
+          </button>
+          <button
+            onClick={() => deleteVPA(vpa.metadata.uid)}
+            className="rounded p-1 text-slate-600 transition hover:text-status-failed"
+            aria-label="Delete VPA"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ))}
+
+      {nsSnaps.map((snap) => (
+        <div
+          key={snap.metadata.uid}
+          className="flex items-center gap-2 rounded-md border border-panel-700 bg-panel-900 px-2 py-1.5"
+        >
+          <Camera className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[11px] font-semibold text-slate-200">
+              {snap.metadata.name}
+            </p>
+            <p className="text-[9px] text-slate-500">
+              {snap.spec.sourcePVC} ·{" "}
+              {snap.status.readyToUse ? "ready" : "provisioning…"}
+            </p>
+          </div>
+          <button
+            onClick={() => restoreVolumeSnapshot(snap.metadata.uid)}
+            disabled={!snap.status.readyToUse}
+            className="rounded bg-kube-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-kube-400 transition hover:bg-kube-500/25 disabled:opacity-40"
+          >
+            Restore
+          </button>
+          <button
+            onClick={() => deleteVolumeSnapshot(snap.metadata.uid)}
+            className="rounded p-0.5 text-slate-600 transition hover:text-status-failed"
+            aria-label="Delete snapshot"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        </div>
+      ))}
+    </Section>
+  );
+}
+
+function ExtensibilitySection({ namespace }: { namespace: string }) {
+  const crds = useClusterStore((s) => s.crds);
+  const customResources = useClusterStore((s) => s.customResources);
+  const registerSampleOperator = useClusterStore((s) => s.registerSampleOperator);
+  const deleteCRD = useClusterStore((s) => s.deleteCRD);
+  const deleteCustomResource = useClusterStore((s) => s.deleteCustomResource);
+
+  const hasOperator = crds.some((c) => c.operator === "Database");
+
+  return (
+    <Section label="Extensibility (CRDs)">
+      {!hasOperator && (
+        <button
+          onClick={registerSampleOperator}
+          className="flex w-full items-center justify-center gap-1.5 rounded-md border border-kube-500/50 bg-kube-500/15 px-2 py-1.5 text-[11px] font-semibold text-kube-400 transition hover:bg-kube-500/25"
+        >
+          <Boxes className="h-3.5 w-3.5" />
+          Register sample Database operator
+        </button>
+      )}
+
+      {crds.map((crd) => {
+        const crs = customResources.filter(
+          (cr) =>
+            cr.kind === crd.spec.names.kind &&
+            (crd.spec.scope === "Cluster" || cr.metadata.namespace === namespace),
+        );
+        return (
+          <div
+            key={crd.metadata.uid}
+            className="space-y-1.5 rounded-md border border-panel-700 bg-panel-900 p-2"
+          >
+            <div className="flex items-center gap-2">
+              <Blocks className="h-3.5 w-3.5 shrink-0 text-kube-400" />
+              <button
+                onClick={() =>
+                  useClusterStore.getState().openDrawer({
+                    kind: "CustomResourceDefinition",
+                    name: crd.metadata.name,
+                    id: crd.metadata.uid,
+                  })
+                }
+                className="min-w-0 flex-1 text-left"
+              >
+                <p className="truncate text-[11px] font-semibold text-slate-200">
+                  {crd.spec.names.kind}
+                  {crd.operator && (
+                    <span className="ml-1 rounded bg-kube-500/20 px-1 text-[8px] text-kube-300">
+                      operator
+                    </span>
+                  )}
+                </p>
+                <p className="truncate text-[9px] text-slate-500">
+                  {crd.metadata.name}
+                </p>
+              </button>
+              <button
+                onClick={() => deleteCRD(crd.metadata.uid)}
+                className="rounded p-1 text-slate-600 transition hover:text-status-failed"
+                aria-label="Delete CRD"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            <CustomResourceForm crd={crd} />
+
+            {crs.map((cr) => (
+              <div
+                key={cr.metadata.uid}
+                className="flex items-center gap-2 rounded border border-panel-700 bg-panel-850 px-2 py-1"
+              >
+                <span className="min-w-0 flex-1 truncate text-[10px] text-slate-300">
+                  <button
+                    onClick={() =>
+                      useClusterStore.getState().openDrawer({
+                        kind: cr.kind,
+                        name: cr.metadata.name,
+                        id: cr.metadata.uid,
+                      })
+                    }
+                    className="truncate hover:text-kube-300"
+                  >
+                    {cr.metadata.name}
+                  </button>
+                  <span className="ml-1 text-[9px] text-slate-600">
+                    {Object.entries(cr.spec)
+                      .slice(0, 2)
+                      .map(([k, v]) => `${k}=${v}`)
+                      .join(" ")}
+                  </span>
+                </span>
+                <button
+                  onClick={() => deleteCustomResource(cr.metadata.uid)}
+                  className="rounded p-0.5 text-slate-600 transition hover:text-status-failed"
+                  aria-label="Delete custom resource"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </Section>
+  );
+}
+
+function CustomResourceForm({ crd }: { crd: import("@/store/types").CustomResourceDefinition }) {
+  const createCustomResource = useClusterStore((s) => s.createCustomResource);
+  const [name, setName] = useState("");
+  const [values, setValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(crd.spec.schema.map((f) => [f.name, f.default ?? ""])),
+  );
+
+  const submit = () => {
+    const spec: Record<string, string | number | boolean> = {};
+    for (const f of crd.spec.schema) {
+      const raw = values[f.name] ?? "";
+      spec[f.name] =
+        f.type === "number"
+          ? Number(raw) || 0
+          : f.type === "boolean"
+            ? raw === "true"
+            : raw;
+    }
+    createCustomResource({ crdId: crd.metadata.uid, name: name.trim() || undefined, spec });
+    setName("");
+    setValues(
+      Object.fromEntries(crd.spec.schema.map((f) => [f.name, f.default ?? ""])),
+    );
+  };
+
+  return (
+    <div className="space-y-1.5 border-t border-panel-700 pt-1.5">
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder={`${crd.spec.names.singular} name (auto)`}
+        className={inputClass}
+      />
+      {crd.spec.schema.map((f) => (
+        <div key={f.name} className="flex items-center justify-between gap-2">
+          <span className="text-[10px] text-slate-500">{f.name}</span>
+          {f.type === "boolean" ? (
+            <select
+              value={values[f.name]}
+              onChange={(e) =>
+                setValues((v) => ({ ...v, [f.name]: e.target.value }))
+              }
+              className="w-28 rounded-md border border-panel-700 bg-panel-900 px-2 py-1 text-xs text-slate-200 outline-none focus:border-kube-500"
+            >
+              <option value="false">false</option>
+              <option value="true">true</option>
+            </select>
+          ) : (
+            <input
+              type={f.type === "number" ? "number" : "text"}
+              value={values[f.name]}
+              onChange={(e) =>
+                setValues((v) => ({ ...v, [f.name]: e.target.value }))
+              }
+              className="w-28 rounded-md border border-panel-700 bg-panel-900 px-2 py-1 text-xs text-slate-200 outline-none focus:border-kube-500"
+            />
+          )}
+        </div>
+      ))}
+      <button
+        onClick={submit}
+        className="flex w-full items-center justify-center gap-1 rounded-md bg-kube-500 px-2 py-1 text-[10px] font-semibold text-white transition hover:bg-kube-400"
+      >
+        <Plus className="h-3 w-3" />
+        Create {crd.spec.names.kind}
+      </button>
+    </div>
+  );
+}
 
 function DeploymentRow({
   deployment: d,
@@ -1324,6 +2212,8 @@ function SecretRow({ secret }: { secret: Secret }) {
 
 function PVCRow({ pvc }: { pvc: PersistentVolumeClaim }) {
   const deletePVC = useClusterStore((s) => s.deletePVC);
+  const resizePVC = useClusterStore((s) => s.resizePVC);
+  const createVolumeSnapshot = useClusterStore((s) => s.createVolumeSnapshot);
   const openDrawer = useClusterStore((s) => s.openDrawer);
   return (
     <div className="flex items-center gap-1.5 rounded-md border border-panel-700 bg-panel-850 px-2 py-1.5">
@@ -1343,6 +2233,20 @@ function PVCRow({ pvc }: { pvc: PersistentVolumeClaim }) {
       <span className="text-[9px] text-slate-500">
         {pvc.spec.storage}Gi · {pvc.status.phase}
       </span>
+      <button
+        onClick={() => resizePVC(pvc.metadata.uid, pvc.spec.storage + 5)}
+        className="rounded p-0.5 text-slate-500 hover:text-kube-400"
+        title="Expand +5Gi"
+      >
+        <Plus className="h-3 w-3" />
+      </button>
+      <button
+        onClick={() => createVolumeSnapshot(pvc.metadata.uid)}
+        className="rounded p-0.5 text-slate-500 hover:text-kube-400"
+        title="Snapshot PVC"
+      >
+        <Camera className="h-3 w-3" />
+      </button>
       <button
         onClick={() => deletePVC(pvc.metadata.uid)}
         className="rounded p-0.5 text-slate-600 hover:text-status-failed"

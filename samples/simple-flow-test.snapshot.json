@@ -1,0 +1,175 @@
+{
+  "version": 1,
+  "exportedAt": "2026-08-08T00:00:00.000Z",
+  "namespace": "default",
+  "namespaces": ["default", "kube-system", "kube-public"],
+  "simClock": 1786147200000,
+  "timeScale": 1,
+  "nodes": [
+    {
+      "id": "node-worker-1",
+      "name": "worker-1",
+      "role": "worker",
+      "status": "Ready",
+      "cpuCapacity": 4,
+      "cpuUsed": 0,
+      "memCapacity": 8,
+      "memUsed": 0,
+      "labels": { "kubernetes.io/hostname": "worker-1" },
+      "taints": [],
+      "podIds": [],
+      "createdAt": 1786147200000
+    },
+    {
+      "id": "node-worker-2",
+      "name": "worker-2",
+      "role": "worker",
+      "status": "Ready",
+      "cpuCapacity": 4,
+      "cpuUsed": 0,
+      "memCapacity": 8,
+      "memUsed": 0,
+      "labels": { "kubernetes.io/hostname": "worker-2" },
+      "taints": [],
+      "podIds": [],
+      "createdAt": 1786147200000
+    }
+  ],
+  "pods": [],
+  "replicaSets": [
+    {
+      "metadata": {
+        "name": "web-6d8f",
+        "namespace": "default",
+        "uid": "rs-web",
+        "labels": { "app": "web" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z",
+        "ownerReferences": [
+          { "kind": "Deployment", "name": "web", "uid": "dep-web" }
+        ]
+      },
+      "spec": {
+        "replicas": 3,
+        "selector": { "app": "web" },
+        "template": {
+          "labels": { "app": "web" },
+          "containers": [
+            {
+              "name": "nginx",
+              "image": "nginx:1.25",
+              "ports": [80],
+              "state": "Running"
+            }
+          ]
+        }
+      },
+      "status": { "replicas": 0, "readyReplicas": 0 },
+      "revision": 1,
+      "image": "nginx:1.25",
+      "color": "#4d9dff",
+      "createdAt": 1786147200000
+    }
+  ],
+  "deployments": [
+    {
+      "metadata": {
+        "name": "web",
+        "namespace": "default",
+        "uid": "dep-web",
+        "labels": { "app": "web" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "replicas": 3,
+        "selector": { "app": "web" },
+        "strategy": { "type": "RollingUpdate", "maxSurge": 1, "maxUnavailable": 1 },
+        "template": {
+          "labels": { "app": "web" },
+          "containers": [
+            {
+              "name": "nginx",
+              "image": "nginx:1.25",
+              "ports": [80],
+              "state": "Running"
+            }
+          ]
+        }
+      },
+      "status": { "replicas": 0, "readyReplicas": 0 },
+      "activeReplicaSetId": "rs-web",
+      "revisions": [
+        {
+          "revision": 1,
+          "image": "nginx:1.25",
+          "timestamp": "2026-08-08T00:00:00.000Z",
+          "replicaSetId": "rs-web"
+        }
+      ],
+      "color": "#4d9dff",
+      "createdAt": 1786147200000
+    }
+  ],
+  "statefulSets": [],
+  "daemonSets": [],
+  "jobs": [],
+  "cronJobs": [],
+  "hpas": [],
+  "services": [
+    {
+      "metadata": {
+        "name": "web-svc",
+        "namespace": "default",
+        "uid": "svc-web",
+        "labels": { "app": "web" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "type": "ClusterIP",
+        "selector": { "app": "web" },
+        "ports": [{ "port": 80, "targetPort": 80 }]
+      },
+      "status": { "clusterIP": "10.96.0.50" },
+      "color": "#4d9dff",
+      "createdAt": 1786147200000
+    }
+  ],
+  "ingresses": [
+    {
+      "metadata": {
+        "name": "web-ingress",
+        "namespace": "default",
+        "uid": "ing-web",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "rules": [
+          { "host": "demo.local", "path": "/", "serviceName": "web-svc", "servicePort": 80 }
+        ]
+      },
+      "createdAt": 1786147200000
+    }
+  ],
+  "networkPolicies": [],
+  "configMaps": [],
+  "secrets": [],
+  "persistentVolumes": [],
+  "persistentVolumeClaims": [],
+  "serviceAccounts": [
+    {
+      "metadata": {
+        "name": "default",
+        "namespace": "default",
+        "uid": "sa-default-default",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "createdAt": 1786147200000
+    }
+  ],
+  "roles": [],
+  "clusterRoles": [],
+  "roleBindings": [],
+  "clusterRoleBindings": [],
+  "resourceQuotas": [],
+  "limitRanges": [],
+  "events": []
+}

@@ -134,6 +134,9 @@ export function buildManifest(
       : undefined,
   };
   if (obj.type !== undefined) manifest.type = obj.type;
+  if (obj.rules !== undefined) manifest.rules = obj.rules;
+  if (obj.subjects !== undefined) manifest.subjects = obj.subjects;
+  if (obj.roleRef !== undefined) manifest.roleRef = obj.roleRef;
   if (obj.spec !== undefined) manifest.spec = obj.spec;
   if (obj.data !== undefined) manifest.data = obj.data;
   if (obj.status !== undefined) manifest.status = obj.status;

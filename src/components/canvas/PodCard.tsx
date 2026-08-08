@@ -1,12 +1,13 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { RotateCw, Skull, Zap } from "lucide-react";
+import { RotateCw, Skull, TriangleAlert, Zap } from "lucide-react";
 import { useClusterStore } from "@/store/useClusterStore";
 import { useFlowStore } from "@/store/useFlowStore";
 import type { Pod } from "@/store/types";
 import { phaseDotClass, phaseBorderClass } from "@/lib/status";
 import { labelsMatchQuery } from "@/lib/selector";
+import { canI } from "@/lib/rbac";
 
 /**
  * PodCard — a compact pod chip nested inside its Node box (reference doc §3.1).
@@ -20,10 +21,25 @@ export function PodCard({ pod }: { pod: Pod }) {
   const openDrawer = useClusterStore((s) => s.openDrawer);
   const killPod = useClusterStore((s) => s.killPod);
   const selectorQuery = useClusterStore((s) => s.ui.selectorQuery);
+  const rbacSubject = useClusterStore((s) => s.ui.rbacSubject);
+  const roles = useClusterStore((s) => s.roles);
+  const clusterRoles = useClusterStore((s) => s.clusterRoles);
+  const roleBindings = useClusterStore((s) => s.roleBindings);
+  const clusterRoleBindings = useClusterStore((s) => s.clusterRoleBindings);
   const hits = useFlowStore((s) => s.hitCounts[pod.metadata.uid] ?? 0);
   const flashing = useFlowStore((s) => s.flashPodUid === pod.metadata.uid);
 
   const matches = labelsMatchQuery(pod.metadata.labels, selectorQuery);
+  const rbacVisible = rbacSubject
+    ? canI(
+        { roles, clusterRoles, roleBindings, clusterRoleBindings },
+        rbacSubject,
+        "get",
+        "pods",
+        pod.metadata.namespace,
+      )
+    : true;
+  const dimOpacity = !rbacVisible ? 0.18 : matches ? 1 : 0.3;
 
   const shortName =
     pod.metadata.name.length > 22
@@ -33,10 +49,11 @@ export function PodCard({ pod }: { pod: Pod }) {
   return (
     <motion.div
       layout
+      data-pod-uid={pod.metadata.uid}
       initial={{ scale: 0.7, opacity: 0 }}
       animate={{
         scale: flashing ? 1.08 : 1,
-        opacity: matches ? 1 : 0.3,
+        opacity: dimOpacity,
         boxShadow: flashing
           ? "0 0 0 2px rgba(77,157,255,0.9), 0 0 14px 2px rgba(77,157,255,0.6)"
           : "0 0 0 0 rgba(0,0,0,0)",
@@ -65,6 +82,33 @@ export function PodCard({ pod }: { pod: Pod }) {
       <span className="min-w-0 flex-1 truncate text-[10px] text-slate-300">
         {shortName}
       </span>
+
+      {pod.status.schedulingReason && pod.status.phase === "Pending" && (
+        <span
+          title={pod.status.schedulingReason}
+          className="flex items-center gap-0.5 rounded bg-status-pending/15 px-1 text-[9px] text-status-pending"
+        >
+          <TriangleAlert className="h-2.5 w-2.5" />
+        </span>
+      )}
+
+      {pod.status.qos && (
+        <span
+          title={`QoS: ${pod.status.qos}`}
+          className="rounded bg-panel-700 px-1 text-[8px] font-semibold uppercase text-slate-400"
+        >
+          {pod.status.qos.slice(0, 4)}
+        </span>
+      )}
+
+      {pod.status.phase === "Running" && pod.status.ready === false && (
+        <span
+          title="Readiness probe failing — removed from Service endpoints"
+          className="rounded bg-status-failed/15 px-1 text-[8px] font-semibold text-status-failed"
+        >
+          NR
+        </span>
+      )}
 
       {hits > 0 && (
         <span className="flex items-center gap-0.5 rounded bg-kube-500/15 px-1 text-[9px] text-kube-400">

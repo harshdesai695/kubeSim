@@ -33,6 +33,16 @@ export interface ObjectMeta {
   annotations?: Record<string, string>;
   creationTimestamp: string;
   ownerReferences?: OwnerReference[];
+  /** Blocks deletion until cleared (Phase 13 GC/finalizers). */
+  finalizers?: string[];
+  /** Set when deletion begins under a finalizer (foreground GC). */
+  deletionTimestamp?: string;
+}
+
+/** A named simulated cluster / kube context (Phase 13 multi-cluster). */
+export interface ClusterContext {
+  id: string;
+  name: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -71,6 +81,7 @@ export interface WorkerNode {
   podIds: string[];
   createdAt: number; // epoch ms — drives AGE column
   draining?: boolean; // transient state during drain & delete
+  unschedulable?: boolean; // cordoned — no new pods scheduled
 }
 
 /* ------------------------------------------------------------------ */
@@ -88,12 +99,38 @@ export type PodPhase =
 
 export type ContainerState = "Running" | "Waiting" | "Terminated";
 
+/** Simulated resource amounts: cpu in cores (fractional), memory in GiB. */
+export interface ResourceAmounts {
+  cpu?: number;
+  memory?: number;
+}
+
+/** Scheduling QoS class derived from requests vs limits (reference doc §9). */
+export type QoSClass = "Guaranteed" | "Burstable" | "BestEffort";
+
+export type TaintEffect = "NoSchedule" | "PreferNoSchedule" | "NoExecute";
+
+/** Pod toleration for node taints (Phase 9). */
+export interface Toleration {
+  key: string;
+  operator?: "Equal" | "Exists";
+  value?: string;
+  effect?: TaintEffect;
+}
+
 export interface Container {
   name: string;
   image: string;
   ports?: number[];
   env?: Record<string, string>;
   state: ContainerState;
+  /** Scheduling requests / limits (Phase 9). */
+  requests?: ResourceAmounts;
+  limits?: ResourceAmounts;
+  /** Ordered init container (runs before app containers). */
+  init?: boolean;
+  /** Long-running sidecar (shown distinctly on the pod card). */
+  sidecar?: boolean;
 }
 
 export interface Pod {
@@ -107,6 +144,20 @@ export interface Pod {
     pvcs?: string[];
     /** StatefulSet ordinal index (stable identity). */
     ordinal?: number;
+    /** Bound ServiceAccount (RBAC identity). */
+    serviceAccountName?: string;
+    /* --- Scheduling controls (Phase 9) --- */
+    nodeSelector?: Record<string, string>;
+    tolerations?: Toleration[];
+    /** Anti-affinity: spread pods sharing this label value across nodes. */
+    antiAffinityLabel?: string;
+    /** Topology spread: even distribution across this node label key. */
+    topologyKey?: string;
+    priorityClassName?: string;
+    priority?: number;
+    /* --- Probe intents (Phase 9) --- */
+    livenessFailing?: boolean;
+    readinessFailing?: boolean;
   };
   status: {
     phase: PodPhase;
@@ -114,6 +165,12 @@ export interface Pod {
     restartCount: number;
     /** Simulated CPU utilization % (driven by HPA load slider). */
     cpu?: number;
+    /** Derived QoS class (Guaranteed/Burstable/BestEffort). */
+    qos?: QoSClass;
+    /** Readiness gate for Service endpoints (default true when Running). */
+    ready?: boolean;
+    /** Human-readable reason a pod is unschedulable / evicted. */
+    schedulingReason?: string;
   };
   /** Accent color inherited from an owning ReplicaSet (grouping cue). */
   ownerColor?: string;
@@ -289,6 +346,10 @@ export interface HorizontalPodAutoscaler {
     minReplicas: number;
     maxReplicas: number;
     targetCPUUtilizationPercentage: number;
+    /** Metric source driving the load slider (Phase 12). */
+    metric?: "cpu" | "memory";
+    /** Scale behavior — stabilization window (seconds) before re-scaling. */
+    behavior?: { stabilizationWindowSeconds?: number };
   };
   status: {
     currentReplicas: number;
@@ -297,6 +358,147 @@ export interface HorizontalPodAutoscaler {
   /** Manual load slider (0–100%) simulating pod CPU. */
   load: number;
   lastScaleAt: number;
+  createdAt: number;
+}
+
+/* ------------------------------------------------------------------ */
+/* Scheduling policy — reference doc §7 (Phase 9 stretch)              */
+/* ------------------------------------------------------------------ */
+
+export interface PriorityClass {
+  metadata: ObjectMeta; // cluster-scoped (namespace = "")
+  value: number;
+  globalDefault?: boolean;
+  description?: string;
+  createdAt: number;
+}
+
+export interface PodDisruptionBudget {
+  metadata: ObjectMeta; // namespaced
+  spec: {
+    selector: Record<string, string>;
+    minAvailable: number;
+  };
+  status: {
+    currentHealthy: number;
+    desiredHealthy: number;
+    disruptionsAllowed: number;
+  };
+  createdAt: number;
+}
+
+/* ------------------------------------------------------------------ */
+/* Extensibility — CRDs & Custom Resources (Phase 10 stretch)          */
+/* ------------------------------------------------------------------ */
+
+export type CRDFieldType = "string" | "number" | "boolean";
+
+export interface CRDField {
+  name: string;
+  type: CRDFieldType;
+  required?: boolean;
+  default?: string;
+}
+
+/** Built-in operator presets that reconcile children for a CR kind. */
+export type OperatorPreset = "Database";
+
+export interface CustomResourceDefinition {
+  metadata: ObjectMeta; // cluster-scoped (namespace = "")
+  spec: {
+    group: string;
+    version: string;
+    names: {
+      kind: string;
+      plural: string;
+      singular: string;
+      shortNames?: string[];
+    };
+    scope: "Namespaced" | "Cluster";
+    schema: CRDField[];
+  };
+  /** When set, the sample operator reconciles managed children. */
+  operator?: OperatorPreset;
+  createdAt: number;
+}
+
+export interface CustomResource {
+  metadata: ObjectMeta;
+  apiVersion: string; // "<group>/<version>"
+  kind: string;
+  spec: Record<string, string | number | boolean>;
+  createdAt: number;
+}
+
+
+export interface ServiceAccount {
+  metadata: ObjectMeta;
+  createdAt: number;
+}
+
+export interface PolicyRule {
+  apiGroups: string[];
+  resources: string[];
+  verbs: string[];
+}
+
+export interface Role {
+  metadata: ObjectMeta; // namespaced
+  rules: PolicyRule[];
+  createdAt: number;
+}
+
+export interface ClusterRole {
+  metadata: ObjectMeta; // cluster-scoped (namespace = "")
+  rules: PolicyRule[];
+  createdAt: number;
+}
+
+export type SubjectKind = "User" | "Group" | "ServiceAccount";
+
+export interface Subject {
+  kind: SubjectKind;
+  name: string;
+  namespace?: string; // for ServiceAccount
+}
+
+export interface RoleRef {
+  kind: "Role" | "ClusterRole";
+  name: string;
+}
+
+export interface RoleBinding {
+  metadata: ObjectMeta; // namespaced
+  subjects: Subject[];
+  roleRef: RoleRef;
+  createdAt: number;
+}
+
+export interface ClusterRoleBinding {
+  metadata: ObjectMeta; // cluster-scoped
+  subjects: Subject[];
+  roleRef: RoleRef; // → ClusterRole
+  createdAt: number;
+}
+
+export interface ResourceQuota {
+  metadata: ObjectMeta; // namespaced
+  spec: { hard: Record<string, number> }; // e.g. { pods: 5, services: 3 }
+  status: { used: Record<string, number> };
+  createdAt: number;
+}
+
+export interface LimitRangeItem {
+  type: "Container";
+  defaultRequest?: { cpu?: string; memory?: string };
+  default?: { cpu?: string; memory?: string };
+  max?: { cpu?: string; memory?: string };
+  min?: { cpu?: string; memory?: string };
+}
+
+export interface LimitRange {
+  metadata: ObjectMeta; // namespaced
+  spec: { limits: LimitRangeItem[] };
   createdAt: number;
 }
 
@@ -395,12 +597,16 @@ export interface Secret {
 
 export type PVPhase = "Available" | "Bound" | "Released";
 
+export type ReclaimPolicy = "Retain" | "Delete" | "Recycle";
+
 export interface PersistentVolume {
   metadata: ObjectMeta; // cluster-scoped (not namespace-filtered)
   spec: {
     capacity: number; // GiB
     accessModes: string[];
     storageClassName?: string;
+    /** Fate of the volume when its PVC is deleted (Phase 12). */
+    reclaimPolicy?: ReclaimPolicy;
   };
   status: {
     phase: PVPhase;
@@ -424,6 +630,32 @@ export interface PersistentVolumeClaim {
     volumeName?: string;
   };
   boundPVUid?: string;
+  createdAt: number;
+}
+
+/* ------------------------------------------------------------------ */
+/* Volume snapshots & autoscaling depth (Phase 12 stretch)             */
+/* ------------------------------------------------------------------ */
+
+export interface VolumeSnapshot {
+  metadata: ObjectMeta; // namespaced
+  spec: { sourcePVC: string };
+  status: { readyToUse: boolean; restoreSize: number };
+  createdAt: number;
+}
+
+export type VPAMode = "Auto" | "Off";
+
+export interface VerticalPodAutoscaler {
+  metadata: ObjectMeta; // namespaced
+  spec: {
+    targetRef: { kind: "Deployment" | "ReplicaSet" | "StatefulSet"; name: string };
+    mode: VPAMode;
+  };
+  status: {
+    recommendedCpu: number; // cores
+    recommendedMemory: number; // GiB
+  };
   createdAt: number;
 }
 

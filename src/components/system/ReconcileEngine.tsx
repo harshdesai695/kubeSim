@@ -16,13 +16,21 @@ const BASE_TICK = 500;
  */
 export function ReconcileEngine() {
   const reconcile = useClusterStore((s) => s.reconcile);
+  const operatorTick = useClusterStore((s) => s.operatorTick);
+  const autoscaleStorageTick = useClusterStore((s) => s.autoscaleStorageTick);
+  const garbageCollect = useClusterStore((s) => s.garbageCollect);
   const simSpeed = useSettingsStore((s) => s.simSpeed);
 
   useEffect(() => {
     const interval = Math.max(120, BASE_TICK / simSpeed);
-    const id = setInterval(reconcile, interval);
+    const id = setInterval(() => {
+      reconcile();
+      operatorTick();
+      autoscaleStorageTick();
+      garbageCollect();
+    }, interval);
     return () => clearInterval(id);
-  }, [reconcile, simSpeed]);
+  }, [reconcile, operatorTick, autoscaleStorageTick, garbageCollect, simSpeed]);
 
   return null;
 }

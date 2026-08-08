@@ -3,7 +3,18 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Editor from "@monaco-editor/react";
-import { Eye, EyeOff, RefreshCw, Send, Terminal, X, Zap } from "lucide-react";
+import {
+  Activity,
+  Eye,
+  EyeOff,
+  HeartPulse,
+  Lock,
+  RefreshCw,
+  Send,
+  Terminal,
+  X,
+  Zap,
+} from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 import { useClusterStore } from "@/store/useClusterStore";
 import { useFlowStore } from "@/store/useFlowStore";
@@ -29,8 +40,9 @@ import type {
 import { getControlPlaneComponent } from "@/lib/controlPlane";
 import { formatAge } from "@/lib/time";
 import { generateLogs, simulateExec } from "@/lib/logs";
-import { computeEndpoints } from "@/lib/network";
+import { computeEndpoints, computeEndpointSlice } from "@/lib/network";
 import { toBase64 } from "@/lib/storage";
+import { toYaml } from "@/lib/manifest";
 import { describeSchedule } from "@/lib/cron";
 import { phaseDotClass, phaseTextClass } from "@/lib/status";
 import { Gauge } from "@/components/canvas/Gauge";
@@ -63,7 +75,48 @@ export function DetailDrawer() {
   const jobs = useClusterStore((s) => s.jobs);
   const cronJobs = useClusterStore((s) => s.cronJobs);
   const hpas = useClusterStore((s) => s.hpas);
+  const serviceAccounts = useClusterStore((s) => s.serviceAccounts);
+  const roles = useClusterStore((s) => s.roles);
+  const clusterRoles = useClusterStore((s) => s.clusterRoles);
+  const roleBindings = useClusterStore((s) => s.roleBindings);
+  const clusterRoleBindings = useClusterStore((s) => s.clusterRoleBindings);
+  const resourceQuotas = useClusterStore((s) => s.resourceQuotas);
+  const limitRanges = useClusterStore((s) => s.limitRanges);
+  const priorityClasses = useClusterStore((s) => s.priorityClasses);
+  const podDisruptionBudgets = useClusterStore((s) => s.podDisruptionBudgets);
+  const crds = useClusterStore((s) => s.crds);
+  const customResources = useClusterStore((s) => s.customResources);
+  const volumeSnapshots = useClusterStore((s) => s.volumeSnapshots);
+  const vpas = useClusterStore((s) => s.vpas);
   const closeDrawer = useClusterStore((s) => s.closeDrawer);
+
+  // Generic RBAC / admission / extensibility objects → shown as YAML manifest.
+  const rbac = (() => {
+    if (!selected) return undefined;
+    const byKind: Record<string, { metadata: { uid: string } }[]> = {
+      ServiceAccount: serviceAccounts,
+      Role: roles,
+      ClusterRole: clusterRoles,
+      RoleBinding: roleBindings,
+      ClusterRoleBinding: clusterRoleBindings,
+      ResourceQuota: resourceQuotas,
+      LimitRange: limitRanges,
+      PriorityClass: priorityClasses,
+      PodDisruptionBudget: podDisruptionBudgets,
+      CustomResourceDefinition: crds,
+      VolumeSnapshot: volumeSnapshots,
+      VerticalPodAutoscaler: vpas,
+    };
+    const list = byKind[selected.kind];
+    let obj = list?.find((o) => o.metadata.uid === selected.id);
+    // Custom Resources: match by dynamic kind.
+    if (!obj) {
+      obj = customResources.find(
+        (cr) => cr.kind === selected.kind && cr.metadata.uid === selected.id,
+      );
+    }
+    return obj ? { kind: selected.kind, obj } : undefined;
+  })();
 
   const node =
     selected?.kind === "Node"
@@ -146,7 +199,8 @@ export function DetailDrawer() {
     configMap?.metadata ??
     secret?.metadata ??
     pv?.metadata ??
-    pvc?.metadata;
+    pvc?.metadata ??
+    (rbac?.obj.metadata as ObjectMeta | undefined);
 
   const kindLabel = node
     ? "Node"
@@ -182,7 +236,9 @@ export function DetailDrawer() {
                                   ? "PersistentVolumeClaim"
                                   : cp
                                     ? "Control Plane"
-                                    : selected?.kind ?? "Object";
+                                    : rbac
+                                      ? rbac.kind
+                                      : selected?.kind ?? "Object";
 
   return (
     <AnimatePresence>
@@ -255,6 +311,11 @@ export function DetailDrawer() {
                   emptyState={cp.emptyState}
                   miniPanel={cp.miniPanel}
                 />
+              ) : rbac ? (
+                <ManifestDetail
+                  kind={rbac.kind}
+                  obj={rbac.obj as unknown as Record<string, unknown>}
+                />
               ) : (
                 <GenericDetail kind={selected.kind} name={selected.name} />
               )}
@@ -299,6 +360,8 @@ function nodeToYaml(node: WorkerNode): string {
 
 function NodeDetail({ node }: { node: WorkerNode }) {
   const ready = node.status === "Ready";
+  const cordonNode = useClusterStore((s) => s.cordonNode);
+  const drainNode = useClusterStore((s) => s.drainNode);
   return (
     <div className="flex h-full flex-col">
       <div className="space-y-3 border-b border-panel-700 p-4">
@@ -318,6 +381,11 @@ function NodeDetail({ node }: { node: WorkerNode }) {
             {node.status}
           </span>
           <span className="text-[11px] text-slate-500">role: worker</span>
+          {node.unschedulable && (
+            <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400">
+              SchedulingDisabled
+            </span>
+          )}
           <span className="ml-auto text-[11px] text-slate-500">
             age {formatAge(node.createdAt)}
           </span>
@@ -335,6 +403,23 @@ function NodeDetail({ node }: { node: WorkerNode }) {
           capacity={node.memCapacity}
           unit="Gi"
         />
+
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            onClick={() => cordonNode(node.id, !node.unschedulable)}
+            className="flex items-center gap-1 rounded-md bg-panel-700 px-2 py-1 text-[10px] font-semibold text-slate-300 transition hover:bg-panel-600"
+          >
+            <Lock className="h-3 w-3" />
+            {node.unschedulable ? "Uncordon" : "Cordon"}
+          </button>
+          <button
+            onClick={() => drainNode(node.id)}
+            className="flex items-center gap-1 rounded-md bg-status-pending/15 px-2 py-1 text-[10px] font-semibold text-status-pending transition hover:bg-status-pending/25"
+          >
+            <RefreshCw className="h-3 w-3" />
+            Drain
+          </button>
+        </div>
 
         <div>
           <p className="mb-1 text-[10px] uppercase tracking-wider text-slate-500">
@@ -453,6 +538,53 @@ function podToYaml(pod: Pod): string {
     .join("\n");
 }
 
+/** Liveness/readiness probe simulation toggles (Phase 9). */
+function ProbeControls({ pod }: { pod: Pod }) {
+  const setPodProbe = useClusterStore((s) => s.setPodProbe);
+  const setFinalizer = useClusterStore((s) => s.setFinalizer);
+  const liveFail = !!pod.spec.livenessFailing;
+  const readyFail = !!pod.spec.readinessFailing;
+  const hasFinalizer = !!pod.metadata.finalizers?.length;
+  return (
+    <div className="flex flex-wrap gap-1.5 pt-0.5">
+      <button
+        onClick={() => setPodProbe(pod.metadata.uid, "liveness", !liveFail)}
+        className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition ${
+          liveFail
+            ? "bg-status-failed/20 text-status-failed hover:bg-status-failed/30"
+            : "bg-panel-700 text-slate-300 hover:bg-panel-600"
+        }`}
+      >
+        <HeartPulse className="h-3 w-3" />
+        {liveFail ? "Liveness: failing (restarting)" : "Fail liveness probe"}
+      </button>
+      <button
+        onClick={() => setPodProbe(pod.metadata.uid, "readiness", !readyFail)}
+        className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition ${
+          readyFail
+            ? "bg-status-pending/20 text-status-pending hover:bg-status-pending/30"
+            : "bg-panel-700 text-slate-300 hover:bg-panel-600"
+        }`}
+      >
+        <Activity className="h-3 w-3" />
+        {readyFail ? "Readiness: failing (unready)" : "Fail readiness probe"}
+      </button>
+      <button
+        onClick={() => setFinalizer("Pod", pod.metadata.uid, !hasFinalizer)}
+        title="A finalizer blocks deletion until removed"
+        className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition ${
+          hasFinalizer
+            ? "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30"
+            : "bg-panel-700 text-slate-300 hover:bg-panel-600"
+        }`}
+      >
+        <Lock className="h-3 w-3" />
+        {hasFinalizer ? "Remove finalizer" : "Add finalizer"}
+      </button>
+    </div>
+  );
+}
+
 function PodDetail({ pod }: { pod: Pod }) {
   const [tab, setTab] = useState<"yaml" | "logs" | "exec">("yaml");
   const [logs, setLogs] = useState<string[]>([]);
@@ -492,7 +624,32 @@ function PodDetail({ pod }: { pod: Pod }) {
             label="Containers"
             value={String(pod.spec.containers.length)}
           />
+          <Field label="QoS" value={pod.status.qos ?? "—"} />
+          <Field
+            label="Ready"
+            value={
+              pod.status.phase === "Running"
+                ? pod.status.ready === false
+                  ? "No"
+                  : "Yes"
+                : "—"
+            }
+          />
+          {typeof pod.spec.priority === "number" && (
+            <Field
+              label="Priority"
+              value={`${pod.spec.priorityClassName ?? ""} (${pod.spec.priority})`}
+            />
+          )}
         </div>
+
+        {pod.status.schedulingReason && (
+          <p className="rounded border border-status-pending/40 bg-status-pending/10 px-2 py-1 text-[10px] text-status-pending">
+            {pod.status.schedulingReason}
+          </p>
+        )}
+
+        <ProbeControls pod={pod} />
       </div>
 
       {/* Tabs */}
@@ -815,6 +972,24 @@ function ServiceDetail({ service }: { service: Service }) {
             ))
           )}
         </div>
+      </div>
+
+      <div>
+        <p className="mb-1 text-[10px] uppercase tracking-wider text-slate-500">
+          EndpointSlice
+        </p>
+        {(() => {
+          const slice = computeEndpointSlice(service, pods);
+          return (
+            <div className="rounded border border-panel-700 bg-panel-900 px-2 py-1.5 text-[10px]">
+              <p className="truncate font-mono text-slate-400">{slice.name}</p>
+              <p className="text-slate-600">
+                ports: {slice.ports.join(",") || "<none>"} · {slice.endpoints.length}{" "}
+                address{slice.endpoints.length === 1 ? "" : "es"}
+              </p>
+            </div>
+          );
+        })()}
       </div>
 
       <div className="flex gap-2">
@@ -1379,6 +1554,24 @@ function HPADetail({ hpa }: { hpa: HorizontalPodAutoscaler }) {
 /* ------------------------------------------------------------------ */
 /* Generic fallback                                                    */
 /* ------------------------------------------------------------------ */
+
+function ManifestDetail({
+  kind,
+  obj,
+}: {
+  kind: string;
+  obj: Record<string, unknown>;
+}) {
+  return (
+    <Editor
+      height="100%"
+      defaultLanguage="yaml"
+      theme="vs-dark"
+      value={toYaml(kind, obj)}
+      options={READONLY_EDITOR}
+    />
+  );
+}
 
 function GenericDetail({ kind, name }: { kind: string; name: string }) {
   const yaml = `# ${kind}/${name}\n# YAML manifest will render here in later phases.`;

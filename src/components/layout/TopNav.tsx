@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Github, GraduationCap, Layers, RotateCcw, Settings2, TerminalSquare } from "lucide-react";
+import { Bell, Boxes, Github, GraduationCap, Layers, RotateCcw, Settings2, TerminalSquare } from "lucide-react";
 import { useClusterStore } from "@/store/useClusterStore";
 import { useFlowStore } from "@/store/useFlowStore";
 import { useTerminalStore } from "@/store/useTerminalStore";
@@ -24,6 +24,10 @@ export function TopNav() {
   const toggleWorkloads = useClusterStore((s) => s.toggleWorkloads);
   const resetCluster = useClusterStore((s) => s.resetCluster);
   const pushEvent = useClusterStore((s) => s.pushEvent);
+  const clusters = useClusterStore((s) => s.clusters);
+  const activeClusterId = useClusterStore((s) => s.activeClusterId);
+  const createCluster = useClusterStore((s) => s.createCluster);
+  const switchCluster = useClusterStore((s) => s.switchCluster);
   const openScenarios = useUIStore((s) => s.openScenarios);
   const openSettings = useUIStore((s) => s.openSettings);
 
@@ -37,6 +41,15 @@ export function TopNav() {
       return;
     }
     setNamespace(value);
+  };
+
+  const handleClusterChange = (value: string) => {
+    if (value === "__new__") {
+      const name = window.prompt("New cluster context name:")?.trim();
+      if (name) createCluster(name);
+      return;
+    }
+    switchCluster(value);
   };
 
   const handleReset = () => {
@@ -80,6 +93,26 @@ export function TopNav() {
 
       {/* Controls */}
       <div className="no-scrollbar flex min-w-0 items-center gap-1.5 overflow-x-auto md:gap-2 [&>*]:shrink-0">
+        {/* Cluster context selector (multi-cluster) */}
+        <label className="flex items-center gap-2 rounded-md border border-panel-700 bg-panel-850 px-2.5 py-1.5 text-xs">
+          <Boxes className="h-3.5 w-3.5 text-slate-500" />
+          <select
+            value={activeClusterId}
+            onChange={(e) => handleClusterChange(e.target.value)}
+            className="cursor-pointer bg-transparent font-semibold text-emerald-400 outline-none"
+            title="Cluster context"
+          >
+            {clusters.map((c) => (
+              <option key={c.id} value={c.id} className="bg-panel-850 text-slate-200">
+                {c.name}
+              </option>
+            ))}
+            <option value="__new__" className="bg-panel-850 text-emerald-400">
+              + new cluster…
+            </option>
+          </select>
+        </label>
+
         {/* Namespace selector */}
         <label className="flex items-center gap-2 rounded-md border border-panel-700 bg-panel-850 px-2.5 py-1.5 text-xs">
           <span className="hidden text-slate-500 sm:inline">namespace</span>

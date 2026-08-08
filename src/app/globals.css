@@ -59,6 +59,24 @@ body {
   overflow: hidden;
 }
 
+/* --- API request-flow path animation --- */
+@keyframes flowDash {
+  to {
+    stroke-dashoffset: -32;
+  }
+}
+@keyframes flowDashRev {
+  to {
+    stroke-dashoffset: 32;
+  }
+}
+.flow-dash {
+  animation: flowDash 0.9s linear infinite;
+}
+.flow-dash-rev {
+  animation: flowDashRev 0.9s linear infinite;
+}
+
 /* Thin, technical scrollbars */
 * {
   scrollbar-width: thin;

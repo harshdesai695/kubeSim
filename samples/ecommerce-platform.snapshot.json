@@ -1,0 +1,1200 @@
+{
+  "version": 1,
+  "exportedAt": "2026-08-08T00:00:00.000Z",
+  "namespace": "ecommerce",
+  "namespaces": ["default", "kube-system", "kube-public", "ecommerce"],
+  "simClock": 1786147200000,
+  "timeScale": 1,
+  "nodes": [
+    {
+      "id": "node-worker-1",
+      "name": "worker-1",
+      "role": "worker",
+      "status": "Ready",
+      "cpuCapacity": 4,
+      "cpuUsed": 0,
+      "memCapacity": 8,
+      "memUsed": 0,
+      "labels": { "kubernetes.io/hostname": "worker-1", "zone": "us-east-1a" },
+      "taints": [],
+      "podIds": [],
+      "createdAt": 1786147200000
+    },
+    {
+      "id": "node-worker-2",
+      "name": "worker-2",
+      "role": "worker",
+      "status": "Ready",
+      "cpuCapacity": 4,
+      "cpuUsed": 0,
+      "memCapacity": 8,
+      "memUsed": 0,
+      "labels": { "kubernetes.io/hostname": "worker-2", "zone": "us-east-1b" },
+      "taints": [],
+      "podIds": [],
+      "createdAt": 1786147200000
+    },
+    {
+      "id": "node-worker-3",
+      "name": "worker-3",
+      "role": "worker",
+      "status": "Ready",
+      "cpuCapacity": 8,
+      "cpuUsed": 0,
+      "memCapacity": 16,
+      "memUsed": 0,
+      "labels": { "kubernetes.io/hostname": "worker-3", "zone": "us-east-1c" },
+      "taints": [],
+      "podIds": [],
+      "createdAt": 1786147200000
+    }
+  ],
+  "pods": [],
+  "replicaSets": [
+    {
+      "metadata": {
+        "name": "frontend-7c9d",
+        "namespace": "ecommerce",
+        "uid": "rs-frontend",
+        "labels": { "app": "frontend", "tier": "web" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z",
+        "ownerReferences": [
+          { "kind": "Deployment", "name": "frontend", "uid": "dep-frontend" }
+        ]
+      },
+      "spec": {
+        "replicas": 3,
+        "selector": { "app": "frontend" },
+        "template": {
+          "labels": { "app": "frontend", "tier": "web" },
+          "containers": [
+            {
+              "name": "web",
+              "image": "ecommerce/frontend:2.4.0",
+              "ports": [80],
+              "env": { "API_BASE_URL": "https://shop.example.com/api" },
+              "state": "Running"
+            }
+          ],
+          "configMaps": ["web-config"]
+        }
+      },
+      "status": { "replicas": 0, "readyReplicas": 0 },
+      "revision": 1,
+      "image": "ecommerce/frontend:2.4.0",
+      "color": "#4d9dff",
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "api-gateway-5b41",
+        "namespace": "ecommerce",
+        "uid": "rs-api-gateway",
+        "labels": { "app": "api-gateway", "tier": "edge" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z",
+        "ownerReferences": [
+          { "kind": "Deployment", "name": "api-gateway", "uid": "dep-api-gateway" }
+        ]
+      },
+      "spec": {
+        "replicas": 2,
+        "selector": { "app": "api-gateway" },
+        "template": {
+          "labels": { "app": "api-gateway", "tier": "edge" },
+          "containers": [
+            {
+              "name": "gateway",
+              "image": "ecommerce/api-gateway:1.9.2",
+              "ports": [8080],
+              "state": "Running"
+            }
+          ],
+          "configMaps": ["app-config"]
+        }
+      },
+      "status": { "replicas": 0, "readyReplicas": 0 },
+      "revision": 1,
+      "image": "ecommerce/api-gateway:1.9.2",
+      "color": "#a855f7",
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "catalog-8f2a",
+        "namespace": "ecommerce",
+        "uid": "rs-catalog",
+        "labels": { "app": "catalog", "tier": "backend" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z",
+        "ownerReferences": [
+          { "kind": "Deployment", "name": "catalog", "uid": "dep-catalog" }
+        ]
+      },
+      "spec": {
+        "replicas": 2,
+        "selector": { "app": "catalog" },
+        "template": {
+          "labels": { "app": "catalog", "tier": "backend" },
+          "containers": [
+            {
+              "name": "catalog",
+              "image": "ecommerce/catalog-service:3.1.0",
+              "ports": [8080],
+              "state": "Running"
+            }
+          ],
+          "configMaps": ["catalog-config"]
+        }
+      },
+      "status": { "replicas": 0, "readyReplicas": 0 },
+      "revision": 1,
+      "image": "ecommerce/catalog-service:3.1.0",
+      "color": "#22c55e",
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "cart-3d77",
+        "namespace": "ecommerce",
+        "uid": "rs-cart",
+        "labels": { "app": "cart", "tier": "backend" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z",
+        "ownerReferences": [
+          { "kind": "Deployment", "name": "cart", "uid": "dep-cart" }
+        ]
+      },
+      "spec": {
+        "replicas": 2,
+        "selector": { "app": "cart" },
+        "template": {
+          "labels": { "app": "cart", "tier": "backend" },
+          "containers": [
+            {
+              "name": "cart",
+              "image": "ecommerce/cart-service:2.0.5",
+              "ports": [8080],
+              "env": { "REDIS_HOST": "redis-svc", "REDIS_PORT": "6379" },
+              "state": "Running"
+            }
+          ]
+        }
+      },
+      "status": { "replicas": 0, "readyReplicas": 0 },
+      "revision": 1,
+      "image": "ecommerce/cart-service:2.0.5",
+      "color": "#f59e0b",
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "orders-9a13",
+        "namespace": "ecommerce",
+        "uid": "rs-orders",
+        "labels": { "app": "orders", "tier": "backend" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z",
+        "ownerReferences": [
+          { "kind": "Deployment", "name": "orders", "uid": "dep-orders" }
+        ]
+      },
+      "spec": {
+        "replicas": 2,
+        "selector": { "app": "orders" },
+        "template": {
+          "labels": { "app": "orders", "tier": "backend" },
+          "containers": [
+            {
+              "name": "orders",
+              "image": "ecommerce/orders-service:2.6.1",
+              "ports": [8080],
+              "env": { "DB_HOST": "postgres-svc", "DB_PORT": "5432" },
+              "state": "Running"
+            }
+          ],
+          "secrets": ["db-credentials"]
+        }
+      },
+      "status": { "replicas": 0, "readyReplicas": 0 },
+      "revision": 1,
+      "image": "ecommerce/orders-service:2.6.1",
+      "color": "#ef4444",
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "payments-6e08",
+        "namespace": "ecommerce",
+        "uid": "rs-payments",
+        "labels": { "app": "payments", "tier": "backend" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z",
+        "ownerReferences": [
+          { "kind": "Deployment", "name": "payments", "uid": "dep-payments" }
+        ]
+      },
+      "spec": {
+        "replicas": 2,
+        "selector": { "app": "payments" },
+        "template": {
+          "labels": { "app": "payments", "tier": "backend" },
+          "containers": [
+            {
+              "name": "payments",
+              "image": "ecommerce/payments-service:1.4.3",
+              "ports": [8080],
+              "state": "Running"
+            }
+          ],
+          "secrets": ["payment-secret"]
+        }
+      },
+      "status": { "replicas": 0, "readyReplicas": 0 },
+      "revision": 1,
+      "image": "ecommerce/payments-service:1.4.3",
+      "color": "#ec4899",
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "redis-1c55",
+        "namespace": "ecommerce",
+        "uid": "rs-redis",
+        "labels": { "app": "redis", "tier": "cache" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z",
+        "ownerReferences": [
+          { "kind": "Deployment", "name": "redis", "uid": "dep-redis" }
+        ]
+      },
+      "spec": {
+        "replicas": 1,
+        "selector": { "app": "redis" },
+        "template": {
+          "labels": { "app": "redis", "tier": "cache" },
+          "containers": [
+            {
+              "name": "redis",
+              "image": "redis:7.2-alpine",
+              "ports": [6379],
+              "state": "Running"
+            }
+          ],
+          "pvcs": ["redis-data"]
+        }
+      },
+      "status": { "replicas": 0, "readyReplicas": 0 },
+      "revision": 1,
+      "image": "redis:7.2-alpine",
+      "color": "#f97316",
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "postgres-4b90",
+        "namespace": "ecommerce",
+        "uid": "rs-postgres",
+        "labels": { "app": "postgres", "tier": "database" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z",
+        "ownerReferences": [
+          { "kind": "Deployment", "name": "postgres", "uid": "dep-postgres" }
+        ]
+      },
+      "spec": {
+        "replicas": 1,
+        "selector": { "app": "postgres" },
+        "template": {
+          "labels": { "app": "postgres", "tier": "database" },
+          "containers": [
+            {
+              "name": "postgres",
+              "image": "postgres:16.2",
+              "ports": [5432],
+              "state": "Running"
+            }
+          ],
+          "secrets": ["db-credentials"],
+          "pvcs": ["postgres-data"]
+        }
+      },
+      "status": { "replicas": 0, "readyReplicas": 0 },
+      "revision": 1,
+      "image": "postgres:16.2",
+      "color": "#14b8a6",
+      "createdAt": 1786147200000
+    }
+  ],
+  "deployments": [
+    {
+      "metadata": {
+        "name": "frontend",
+        "namespace": "ecommerce",
+        "uid": "dep-frontend",
+        "labels": { "app": "frontend", "tier": "web" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "replicas": 3,
+        "selector": { "app": "frontend" },
+        "strategy": { "type": "RollingUpdate", "maxSurge": 1, "maxUnavailable": 1 },
+        "template": {
+          "labels": { "app": "frontend", "tier": "web" },
+          "containers": [
+            {
+              "name": "web",
+              "image": "ecommerce/frontend:2.4.0",
+              "ports": [80],
+              "env": { "API_BASE_URL": "https://shop.example.com/api" },
+              "state": "Running"
+            }
+          ],
+          "configMaps": ["web-config"]
+        }
+      },
+      "status": { "replicas": 0, "readyReplicas": 0 },
+      "activeReplicaSetId": "rs-frontend",
+      "revisions": [
+        {
+          "revision": 1,
+          "image": "ecommerce/frontend:2.4.0",
+          "timestamp": "2026-08-08T00:00:00.000Z",
+          "replicaSetId": "rs-frontend"
+        }
+      ],
+      "color": "#4d9dff",
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "api-gateway",
+        "namespace": "ecommerce",
+        "uid": "dep-api-gateway",
+        "labels": { "app": "api-gateway", "tier": "edge" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "replicas": 2,
+        "selector": { "app": "api-gateway" },
+        "strategy": { "type": "RollingUpdate", "maxSurge": 1, "maxUnavailable": 1 },
+        "template": {
+          "labels": { "app": "api-gateway", "tier": "edge" },
+          "containers": [
+            {
+              "name": "gateway",
+              "image": "ecommerce/api-gateway:1.9.2",
+              "ports": [8080],
+              "state": "Running"
+            }
+          ],
+          "configMaps": ["app-config"]
+        }
+      },
+      "status": { "replicas": 0, "readyReplicas": 0 },
+      "activeReplicaSetId": "rs-api-gateway",
+      "revisions": [
+        {
+          "revision": 1,
+          "image": "ecommerce/api-gateway:1.9.2",
+          "timestamp": "2026-08-08T00:00:00.000Z",
+          "replicaSetId": "rs-api-gateway"
+        }
+      ],
+      "color": "#a855f7",
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "catalog",
+        "namespace": "ecommerce",
+        "uid": "dep-catalog",
+        "labels": { "app": "catalog", "tier": "backend" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "replicas": 2,
+        "selector": { "app": "catalog" },
+        "strategy": { "type": "RollingUpdate", "maxSurge": 1, "maxUnavailable": 1 },
+        "template": {
+          "labels": { "app": "catalog", "tier": "backend" },
+          "containers": [
+            {
+              "name": "catalog",
+              "image": "ecommerce/catalog-service:3.1.0",
+              "ports": [8080],
+              "state": "Running"
+            }
+          ],
+          "configMaps": ["catalog-config"]
+        }
+      },
+      "status": { "replicas": 0, "readyReplicas": 0 },
+      "activeReplicaSetId": "rs-catalog",
+      "revisions": [
+        {
+          "revision": 1,
+          "image": "ecommerce/catalog-service:3.1.0",
+          "timestamp": "2026-08-08T00:00:00.000Z",
+          "replicaSetId": "rs-catalog"
+        }
+      ],
+      "color": "#22c55e",
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "cart",
+        "namespace": "ecommerce",
+        "uid": "dep-cart",
+        "labels": { "app": "cart", "tier": "backend" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "replicas": 2,
+        "selector": { "app": "cart" },
+        "strategy": { "type": "RollingUpdate", "maxSurge": 1, "maxUnavailable": 1 },
+        "template": {
+          "labels": { "app": "cart", "tier": "backend" },
+          "containers": [
+            {
+              "name": "cart",
+              "image": "ecommerce/cart-service:2.0.5",
+              "ports": [8080],
+              "env": { "REDIS_HOST": "redis-svc", "REDIS_PORT": "6379" },
+              "state": "Running"
+            }
+          ]
+        }
+      },
+      "status": { "replicas": 0, "readyReplicas": 0 },
+      "activeReplicaSetId": "rs-cart",
+      "revisions": [
+        {
+          "revision": 1,
+          "image": "ecommerce/cart-service:2.0.5",
+          "timestamp": "2026-08-08T00:00:00.000Z",
+          "replicaSetId": "rs-cart"
+        }
+      ],
+      "color": "#f59e0b",
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "orders",
+        "namespace": "ecommerce",
+        "uid": "dep-orders",
+        "labels": { "app": "orders", "tier": "backend" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "replicas": 2,
+        "selector": { "app": "orders" },
+        "strategy": { "type": "RollingUpdate", "maxSurge": 1, "maxUnavailable": 1 },
+        "template": {
+          "labels": { "app": "orders", "tier": "backend" },
+          "containers": [
+            {
+              "name": "orders",
+              "image": "ecommerce/orders-service:2.6.1",
+              "ports": [8080],
+              "env": { "DB_HOST": "postgres-svc", "DB_PORT": "5432" },
+              "state": "Running"
+            }
+          ],
+          "secrets": ["db-credentials"]
+        }
+      },
+      "status": { "replicas": 0, "readyReplicas": 0 },
+      "activeReplicaSetId": "rs-orders",
+      "revisions": [
+        {
+          "revision": 1,
+          "image": "ecommerce/orders-service:2.6.1",
+          "timestamp": "2026-08-08T00:00:00.000Z",
+          "replicaSetId": "rs-orders"
+        }
+      ],
+      "color": "#ef4444",
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "payments",
+        "namespace": "ecommerce",
+        "uid": "dep-payments",
+        "labels": { "app": "payments", "tier": "backend" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "replicas": 2,
+        "selector": { "app": "payments" },
+        "strategy": { "type": "RollingUpdate", "maxSurge": 1, "maxUnavailable": 1 },
+        "template": {
+          "labels": { "app": "payments", "tier": "backend" },
+          "containers": [
+            {
+              "name": "payments",
+              "image": "ecommerce/payments-service:1.4.3",
+              "ports": [8080],
+              "state": "Running"
+            }
+          ],
+          "secrets": ["payment-secret"]
+        }
+      },
+      "status": { "replicas": 0, "readyReplicas": 0 },
+      "activeReplicaSetId": "rs-payments",
+      "revisions": [
+        {
+          "revision": 1,
+          "image": "ecommerce/payments-service:1.4.3",
+          "timestamp": "2026-08-08T00:00:00.000Z",
+          "replicaSetId": "rs-payments"
+        }
+      ],
+      "color": "#ec4899",
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "redis",
+        "namespace": "ecommerce",
+        "uid": "dep-redis",
+        "labels": { "app": "redis", "tier": "cache" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "replicas": 1,
+        "selector": { "app": "redis" },
+        "strategy": { "type": "RollingUpdate", "maxSurge": 1, "maxUnavailable": 0 },
+        "template": {
+          "labels": { "app": "redis", "tier": "cache" },
+          "containers": [
+            {
+              "name": "redis",
+              "image": "redis:7.2-alpine",
+              "ports": [6379],
+              "state": "Running"
+            }
+          ],
+          "pvcs": ["redis-data"]
+        }
+      },
+      "status": { "replicas": 0, "readyReplicas": 0 },
+      "activeReplicaSetId": "rs-redis",
+      "revisions": [
+        {
+          "revision": 1,
+          "image": "redis:7.2-alpine",
+          "timestamp": "2026-08-08T00:00:00.000Z",
+          "replicaSetId": "rs-redis"
+        }
+      ],
+      "color": "#f97316",
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "postgres",
+        "namespace": "ecommerce",
+        "uid": "dep-postgres",
+        "labels": { "app": "postgres", "tier": "database" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "replicas": 1,
+        "selector": { "app": "postgres" },
+        "strategy": { "type": "Recreate" },
+        "template": {
+          "labels": { "app": "postgres", "tier": "database" },
+          "containers": [
+            {
+              "name": "postgres",
+              "image": "postgres:16.2",
+              "ports": [5432],
+              "state": "Running"
+            }
+          ],
+          "secrets": ["db-credentials"],
+          "pvcs": ["postgres-data"]
+        }
+      },
+      "status": { "replicas": 0, "readyReplicas": 0 },
+      "activeReplicaSetId": "rs-postgres",
+      "revisions": [
+        {
+          "revision": 1,
+          "image": "postgres:16.2",
+          "timestamp": "2026-08-08T00:00:00.000Z",
+          "replicaSetId": "rs-postgres"
+        }
+      ],
+      "color": "#14b8a6",
+      "createdAt": 1786147200000
+    }
+  ],
+  "statefulSets": [],
+  "daemonSets": [],
+  "jobs": [],
+  "cronJobs": [],
+  "hpas": [
+    {
+      "metadata": {
+        "name": "frontend-hpa",
+        "namespace": "ecommerce",
+        "uid": "hpa-frontend",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "scaleTargetRef": { "kind": "Deployment", "name": "frontend", "uid": "dep-frontend" },
+        "minReplicas": 3,
+        "maxReplicas": 10,
+        "targetCPUUtilizationPercentage": 60
+      },
+      "status": { "currentReplicas": 3, "currentCPUUtilizationPercentage": 0 },
+      "load": 0,
+      "lastScaleAt": 1786147200000,
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "catalog-hpa",
+        "namespace": "ecommerce",
+        "uid": "hpa-catalog",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "scaleTargetRef": { "kind": "Deployment", "name": "catalog", "uid": "dep-catalog" },
+        "minReplicas": 2,
+        "maxReplicas": 8,
+        "targetCPUUtilizationPercentage": 70
+      },
+      "status": { "currentReplicas": 2, "currentCPUUtilizationPercentage": 0 },
+      "load": 0,
+      "lastScaleAt": 1786147200000,
+      "createdAt": 1786147200000
+    }
+  ],
+  "services": [
+    {
+      "metadata": {
+        "name": "frontend-svc",
+        "namespace": "ecommerce",
+        "uid": "svc-frontend",
+        "labels": { "app": "frontend" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "type": "LoadBalancer",
+        "selector": { "app": "frontend" },
+        "ports": [{ "port": 80, "targetPort": 80, "nodePort": 30080 }]
+      },
+      "status": { "clusterIP": "10.96.10.10", "externalIP": "203.0.113.10" },
+      "color": "#4d9dff",
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "api-gateway-svc",
+        "namespace": "ecommerce",
+        "uid": "svc-api-gateway",
+        "labels": { "app": "api-gateway" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "type": "ClusterIP",
+        "selector": { "app": "api-gateway" },
+        "ports": [{ "port": 8080, "targetPort": 8080 }]
+      },
+      "status": { "clusterIP": "10.96.10.20" },
+      "color": "#a855f7",
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "catalog-svc",
+        "namespace": "ecommerce",
+        "uid": "svc-catalog",
+        "labels": { "app": "catalog" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "type": "ClusterIP",
+        "selector": { "app": "catalog" },
+        "ports": [{ "port": 8080, "targetPort": 8080 }]
+      },
+      "status": { "clusterIP": "10.96.10.30" },
+      "color": "#22c55e",
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "cart-svc",
+        "namespace": "ecommerce",
+        "uid": "svc-cart",
+        "labels": { "app": "cart" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "type": "ClusterIP",
+        "selector": { "app": "cart" },
+        "ports": [{ "port": 8080, "targetPort": 8080 }]
+      },
+      "status": { "clusterIP": "10.96.10.40" },
+      "color": "#f59e0b",
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "orders-svc",
+        "namespace": "ecommerce",
+        "uid": "svc-orders",
+        "labels": { "app": "orders" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "type": "ClusterIP",
+        "selector": { "app": "orders" },
+        "ports": [{ "port": 8080, "targetPort": 8080 }]
+      },
+      "status": { "clusterIP": "10.96.10.50" },
+      "color": "#ef4444",
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "payments-svc",
+        "namespace": "ecommerce",
+        "uid": "svc-payments",
+        "labels": { "app": "payments" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "type": "ClusterIP",
+        "selector": { "app": "payments" },
+        "ports": [{ "port": 8080, "targetPort": 8080 }]
+      },
+      "status": { "clusterIP": "10.96.10.60" },
+      "color": "#ec4899",
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "redis-svc",
+        "namespace": "ecommerce",
+        "uid": "svc-redis",
+        "labels": { "app": "redis" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "type": "ClusterIP",
+        "selector": { "app": "redis" },
+        "ports": [{ "port": 6379, "targetPort": 6379 }]
+      },
+      "status": { "clusterIP": "10.96.10.70" },
+      "color": "#f97316",
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "postgres-svc",
+        "namespace": "ecommerce",
+        "uid": "svc-postgres",
+        "labels": { "app": "postgres" },
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "type": "ClusterIP",
+        "selector": { "app": "postgres" },
+        "ports": [{ "port": 5432, "targetPort": 5432 }]
+      },
+      "status": { "clusterIP": "10.96.10.80" },
+      "color": "#14b8a6",
+      "createdAt": 1786147200000
+    }
+  ],
+  "ingresses": [
+    {
+      "metadata": {
+        "name": "shop-ingress",
+        "namespace": "ecommerce",
+        "uid": "ing-shop",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "rules": [
+          { "host": "shop.example.com", "path": "/", "serviceName": "frontend-svc", "servicePort": 80 },
+          { "host": "shop.example.com", "path": "/api", "serviceName": "api-gateway-svc", "servicePort": 8080 }
+        ]
+      },
+      "createdAt": 1786147200000
+    }
+  ],
+  "networkPolicies": [
+    {
+      "metadata": {
+        "name": "postgres-allow-orders",
+        "namespace": "ecommerce",
+        "uid": "np-postgres",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "podSelector": { "app": "postgres" },
+        "allowAll": false,
+        "fromLabels": { "app": "orders" }
+      },
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "payments-allow-orders",
+        "namespace": "ecommerce",
+        "uid": "np-payments",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "podSelector": { "app": "payments" },
+        "allowAll": false,
+        "fromLabels": { "app": "orders" }
+      },
+      "createdAt": 1786147200000
+    }
+  ],
+  "configMaps": [
+    {
+      "metadata": {
+        "name": "web-config",
+        "namespace": "ecommerce",
+        "uid": "cm-web",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "data": {
+        "API_BASE_URL": "https://shop.example.com/api",
+        "CURRENCY": "USD",
+        "THEME": "light"
+      },
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "app-config",
+        "namespace": "ecommerce",
+        "uid": "cm-app",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "data": {
+        "LOG_LEVEL": "info",
+        "ENVIRONMENT": "production",
+        "RATE_LIMIT": "1000"
+      },
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "catalog-config",
+        "namespace": "ecommerce",
+        "uid": "cm-catalog",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "data": {
+        "FEATURE_RECOMMENDATIONS": "true",
+        "PAGE_SIZE": "24",
+        "CACHE_TTL_SECONDS": "300"
+      },
+      "createdAt": 1786147200000
+    }
+  ],
+  "secrets": [
+    {
+      "metadata": {
+        "name": "payment-secret",
+        "namespace": "ecommerce",
+        "uid": "sec-payment",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "type": "Opaque",
+      "data": {
+        "STRIPE_API_KEY": "sk_live_REDACTED_EXAMPLE_KEY",
+        "WEBHOOK_SECRET": "whsec_REDACTED_EXAMPLE"
+      },
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "db-credentials",
+        "namespace": "ecommerce",
+        "uid": "sec-db",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "type": "Opaque",
+      "data": {
+        "POSTGRES_USER": "orders",
+        "POSTGRES_PASSWORD": "example-not-a-real-password"
+      },
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "shop-tls",
+        "namespace": "ecommerce",
+        "uid": "sec-tls",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "type": "kubernetes.io/tls",
+      "data": {
+        "tls.crt": "-----BEGIN CERTIFICATE----- REDACTED -----END CERTIFICATE-----",
+        "tls.key": "-----BEGIN PRIVATE KEY----- REDACTED -----END PRIVATE KEY-----"
+      },
+      "createdAt": 1786147200000
+    }
+  ],
+  "persistentVolumes": [
+    {
+      "metadata": {
+        "name": "pv-postgres",
+        "namespace": "default",
+        "uid": "pv-postgres",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "capacity": 10,
+        "accessModes": ["ReadWriteOnce"],
+        "storageClassName": "standard"
+      },
+      "status": {
+        "phase": "Bound",
+        "boundClaim": { "name": "postgres-data", "uid": "pvc-postgres" }
+      },
+      "dynamic": false,
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "pv-redis",
+        "namespace": "default",
+        "uid": "pv-redis",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "capacity": 2,
+        "accessModes": ["ReadWriteOnce"],
+        "storageClassName": "standard"
+      },
+      "status": {
+        "phase": "Bound",
+        "boundClaim": { "name": "redis-data", "uid": "pvc-redis" }
+      },
+      "dynamic": false,
+      "createdAt": 1786147200000
+    }
+  ],
+  "persistentVolumeClaims": [
+    {
+      "metadata": {
+        "name": "postgres-data",
+        "namespace": "ecommerce",
+        "uid": "pvc-postgres",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "storage": 10,
+        "accessModes": ["ReadWriteOnce"],
+        "storageClassName": "standard"
+      },
+      "status": { "phase": "Bound", "volumeName": "pv-postgres" },
+      "boundPVUid": "pv-postgres",
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "redis-data",
+        "namespace": "ecommerce",
+        "uid": "pvc-redis",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "storage": 2,
+        "accessModes": ["ReadWriteOnce"],
+        "storageClassName": "standard"
+      },
+      "status": { "phase": "Bound", "volumeName": "pv-redis" },
+      "boundPVUid": "pv-redis",
+      "createdAt": 1786147200000
+    }
+  ],
+  "serviceAccounts": [
+    {
+      "metadata": {
+        "name": "default",
+        "namespace": "default",
+        "uid": "sa-default-default",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "default",
+        "namespace": "kube-system",
+        "uid": "sa-default-kube-system",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "default",
+        "namespace": "kube-public",
+        "uid": "sa-default-kube-public",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "default",
+        "namespace": "ecommerce",
+        "uid": "sa-default-ecommerce",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "checkout-sa",
+        "namespace": "ecommerce",
+        "uid": "sa-checkout",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "createdAt": 1786147200000
+    }
+  ],
+  "roles": [
+    {
+      "metadata": {
+        "name": "config-reader",
+        "namespace": "ecommerce",
+        "uid": "role-config-reader",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "rules": [
+        {
+          "apiGroups": [""],
+          "resources": ["configmaps", "secrets"],
+          "verbs": ["get", "list", "watch"]
+        }
+      ],
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "pod-reader",
+        "namespace": "ecommerce",
+        "uid": "role-pod-reader",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "rules": [
+        {
+          "apiGroups": [""],
+          "resources": ["pods"],
+          "verbs": ["get", "list", "watch"]
+        }
+      ],
+      "createdAt": 1786147200000
+    }
+  ],
+  "clusterRoles": [
+    {
+      "metadata": {
+        "name": "cluster-viewer",
+        "namespace": "",
+        "uid": "clusterrole-viewer",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "rules": [
+        {
+          "apiGroups": ["*"],
+          "resources": ["*"],
+          "verbs": ["get", "list", "watch"]
+        }
+      ],
+      "createdAt": 1786147200000
+    }
+  ],
+  "roleBindings": [
+    {
+      "metadata": {
+        "name": "checkout-config-read",
+        "namespace": "ecommerce",
+        "uid": "rb-checkout-config",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "subjects": [
+        { "kind": "ServiceAccount", "name": "checkout-sa", "namespace": "ecommerce" }
+      ],
+      "roleRef": { "kind": "Role", "name": "config-reader" },
+      "createdAt": 1786147200000
+    },
+    {
+      "metadata": {
+        "name": "ops-pods-read",
+        "namespace": "ecommerce",
+        "uid": "rb-ops-pods",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "subjects": [{ "kind": "User", "name": "ops-bob" }],
+      "roleRef": { "kind": "Role", "name": "pod-reader" },
+      "createdAt": 1786147200000
+    }
+  ],
+  "clusterRoleBindings": [
+    {
+      "metadata": {
+        "name": "dev-cluster-viewers",
+        "namespace": "",
+        "uid": "crb-dev-viewers",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "subjects": [{ "kind": "User", "name": "dev-alice" }],
+      "roleRef": { "kind": "ClusterRole", "name": "cluster-viewer" },
+      "createdAt": 1786147200000
+    }
+  ],
+  "resourceQuotas": [
+    {
+      "metadata": {
+        "name": "ecommerce-quota",
+        "namespace": "ecommerce",
+        "uid": "quota-ecommerce",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "hard": {
+          "pods": 40,
+          "services": 15,
+          "configmaps": 20,
+          "secrets": 20,
+          "persistentvolumeclaims": 10
+        }
+      },
+      "status": { "used": {} },
+      "createdAt": 1786147200000
+    }
+  ],
+  "limitRanges": [
+    {
+      "metadata": {
+        "name": "ecommerce-limits",
+        "namespace": "ecommerce",
+        "uid": "limits-ecommerce",
+        "creationTimestamp": "2026-08-08T00:00:00.000Z"
+      },
+      "spec": {
+        "limits": [
+          {
+            "type": "Container",
+            "defaultRequest": { "cpu": "250m", "memory": "256Mi" },
+            "default": { "cpu": "500m", "memory": "512Mi" }
+          }
+        ]
+      },
+      "createdAt": 1786147200000
+    }
+  ],
+  "events": []
+}

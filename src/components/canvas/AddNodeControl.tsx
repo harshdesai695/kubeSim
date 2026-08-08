@@ -17,6 +17,7 @@ export function AddNodeControl() {
   const [cpu, setCpu] = useState(4);
   const [mem, setMem] = useState(8);
   const [labels, setLabels] = useState("");
+  const [taints, setTaints] = useState("");
 
   const submit = () => {
     const parsedLabels: Record<string, string> = {};
@@ -29,17 +30,39 @@ export function AddNodeControl() {
         if (k) parsedLabels[k.trim()] = rest.join("=").trim();
       });
 
+    // Parse taints like "gpu=true:NoSchedule, dedicated:NoExecute".
+    const parsedTaints = taints
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .map((t) => {
+        const [kv, effectRaw] = t.split(":");
+        const [key, value] = kv.split("=");
+        const effect =
+          effectRaw === "NoExecute" || effectRaw === "PreferNoSchedule"
+            ? effectRaw
+            : "NoSchedule";
+        return {
+          key: key.trim(),
+          value: value?.trim() || undefined,
+          effect: effect as "NoSchedule" | "PreferNoSchedule" | "NoExecute",
+        };
+      })
+      .filter((t) => t.key);
+
     addNode({
       name: name.trim() || undefined,
       cpuCapacity: Math.max(1, Math.round(cpu)),
       memCapacity: Math.max(1, Math.round(mem)),
       labels: Object.keys(parsedLabels).length ? parsedLabels : undefined,
+      taints: parsedTaints.length ? parsedTaints : undefined,
     });
 
     setName("");
     setCpu(4);
     setMem(8);
     setLabels("");
+    setTaints("");
     setOpen(false);
   };
 
@@ -96,6 +119,15 @@ export function AddNodeControl() {
                 value={labels}
                 onChange={(e) => setLabels(e.target.value)}
                 placeholder="disktype=ssd, zone=a"
+                className="w-full rounded-md border border-panel-700 bg-panel-900 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-kube-500"
+              />
+            </Field>
+
+            <Field label="Taints (key=val:Effect, comma-separated)">
+              <input
+                value={taints}
+                onChange={(e) => setTaints(e.target.value)}
+                placeholder="gpu=true:NoSchedule"
                 className="w-full rounded-md border border-panel-700 bg-panel-900 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-kube-500"
               />
             </Field>

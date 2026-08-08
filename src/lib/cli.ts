@@ -13,6 +13,13 @@ import { generateLogs, simulateExec } from "./logs";
 import { toYaml, toJson } from "./manifest";
 import { parseYamlDocuments, type YamlValue } from "./yaml";
 import { setCliActive } from "./echo";
+import { canI, type SubjectRef } from "./rbac";
+import {
+  computeEndpoints,
+  computeEndpointSlice,
+  evaluatePodToPod,
+  resolveServiceDns,
+} from "./network";
 
 export interface CliResult {
   lines: string[];
@@ -53,9 +60,40 @@ const RESOURCES: ResourceDef[] = [
   { canonical: "secrets", kind: "Secret", namespaced: true, aliases: ["secrets", "secret"], list: (s) => s.secrets },
   { canonical: "pvc", kind: "PersistentVolumeClaim", namespaced: true, aliases: ["persistentvolumeclaims", "persistentvolumeclaim", "pvc", "pvcs"], list: (s) => s.persistentVolumeClaims },
   { canonical: "pv", kind: "PersistentVolume", namespaced: false, aliases: ["persistentvolumes", "persistentvolume", "pv", "pvs"], list: (s) => s.persistentVolumes },
+  { canonical: "serviceaccounts", kind: "ServiceAccount", namespaced: true, aliases: ["serviceaccounts", "serviceaccount", "sa"], list: (s) => s.serviceAccounts },
+  { canonical: "roles", kind: "Role", namespaced: true, aliases: ["roles", "role"], list: (s) => s.roles },
+  { canonical: "clusterroles", kind: "ClusterRole", namespaced: false, aliases: ["clusterroles", "clusterrole"], list: (s) => s.clusterRoles },
+  { canonical: "rolebindings", kind: "RoleBinding", namespaced: true, aliases: ["rolebindings", "rolebinding"], list: (s) => s.roleBindings },
+  { canonical: "clusterrolebindings", kind: "ClusterRoleBinding", namespaced: false, aliases: ["clusterrolebindings", "clusterrolebinding"], list: (s) => s.clusterRoleBindings },
+  { canonical: "resourcequotas", kind: "ResourceQuota", namespaced: true, aliases: ["resourcequotas", "resourcequota", "quota", "quotas"], list: (s) => s.resourceQuotas },
+  { canonical: "limitranges", kind: "LimitRange", namespaced: true, aliases: ["limitranges", "limitrange", "limits"], list: (s) => s.limitRanges },
+  { canonical: "priorityclasses", kind: "PriorityClass", namespaced: false, aliases: ["priorityclasses", "priorityclass", "pc"], list: (s) => s.priorityClasses },
+  { canonical: "poddisruptionbudgets", kind: "PodDisruptionBudget", namespaced: true, aliases: ["poddisruptionbudgets", "poddisruptionbudget", "pdb"], list: (s) => s.podDisruptionBudgets },
+  { canonical: "volumesnapshots", kind: "VolumeSnapshot", namespaced: true, aliases: ["volumesnapshots", "volumesnapshot", "vs"], list: (s) => s.volumeSnapshots },
+  { canonical: "verticalpodautoscalers", kind: "VerticalPodAutoscaler", namespaced: true, aliases: ["verticalpodautoscalers", "verticalpodautoscaler", "vpa"], list: (s) => s.vpas },
 ];
 
 const SPECIAL_TYPES = new Set(["nodes", "namespaces", "events"]);
+
+/** Match a token against a registered CRD's plural/singular/kind/shortNames. */
+function resolveCRD(token: string | undefined, s: ClusterState) {
+  if (!token) return undefined;
+  const t = token.toLowerCase();
+  return s.crds.find(
+    (c) =>
+      c.spec.names.plural === t ||
+      c.spec.names.singular === t ||
+      c.spec.names.kind.toLowerCase() === t ||
+      (c.spec.names.shortNames ?? []).map((x) => x.toLowerCase()).includes(t),
+  );
+}
+
+const CRD_ALIASES = new Set([
+  "crd",
+  "crds",
+  "customresourcedefinition",
+  "customresourcedefinitions",
+]);
 
 function resolveType(token?: string): ResourceDef | "nodes" | "namespaces" | "events" | null {
   if (!token) return null;
@@ -279,6 +317,98 @@ function getTable(canonical: string, s: ClusterState, ns: string, wide: boolean)
         ["NAME", "CAPACITY", "STATUS", "STORAGECLASS"],
         s.persistentVolumes.map((x) => [x.metadata.name, `${x.spec.capacity}Gi`, x.status.phase, x.spec.storageClassName ?? "-"]),
       );
+    case "serviceaccounts": {
+      const items = s.serviceAccounts.filter((x) => x.metadata.namespace === ns);
+      if (items.length === 0) return ["No resources found in " + ns + " namespace."];
+      return table(["NAME", "AGE"], items.map((x) => [x.metadata.name, formatAge(x.createdAt)]));
+    }
+    case "roles": {
+      const items = s.roles.filter((x) => x.metadata.namespace === ns);
+      if (items.length === 0) return ["No resources found in " + ns + " namespace."];
+      return table(["NAME", "RULES", "AGE"], items.map((x) => [x.metadata.name, String(x.rules.length), formatAge(x.createdAt)]));
+    }
+    case "clusterroles":
+      if (s.clusterRoles.length === 0) return ["No resources found."];
+      return table(["NAME", "RULES", "AGE"], s.clusterRoles.map((x) => [x.metadata.name, String(x.rules.length), formatAge(x.createdAt)]));
+    case "rolebindings": {
+      const items = s.roleBindings.filter((x) => x.metadata.namespace === ns);
+      if (items.length === 0) return ["No resources found in " + ns + " namespace."];
+      return table(["NAME", "ROLE", "AGE"], items.map((x) => [x.metadata.name, `${x.roleRef.kind}/${x.roleRef.name}`, formatAge(x.createdAt)]));
+    }
+    case "clusterrolebindings":
+      if (s.clusterRoleBindings.length === 0) return ["No resources found."];
+      return table(["NAME", "ROLE", "AGE"], s.clusterRoleBindings.map((x) => [x.metadata.name, `ClusterRole/${x.roleRef.name}`, formatAge(x.createdAt)]));
+    case "resourcequotas": {
+      const items = s.resourceQuotas.filter((x) => x.metadata.namespace === ns);
+      if (items.length === 0) return ["No resources found in " + ns + " namespace."];
+      return table(
+        ["NAME", "HARD", "AGE"],
+        items.map((x) => [
+          x.metadata.name,
+          Object.entries(x.spec.hard).map(([k, v]) => `${k}=${v}`).join(","),
+          formatAge(x.createdAt),
+        ]),
+      );
+    }
+    case "limitranges": {
+      const items = s.limitRanges.filter((x) => x.metadata.namespace === ns);
+      if (items.length === 0) return ["No resources found in " + ns + " namespace."];
+      return table(["NAME", "AGE"], items.map((x) => [x.metadata.name, formatAge(x.createdAt)]));
+    }
+    case "priorityclasses": {
+      if (s.priorityClasses.length === 0) return ["No resources found."];
+      return table(
+        ["NAME", "VALUE", "GLOBAL-DEFAULT", "AGE"],
+        s.priorityClasses.map((x) => [
+          x.metadata.name,
+          String(x.value),
+          x.globalDefault ? "true" : "false",
+          formatAge(x.createdAt),
+        ]),
+      );
+    }
+    case "poddisruptionbudgets": {
+      const items = s.podDisruptionBudgets.filter((x) => x.metadata.namespace === ns);
+      if (items.length === 0) return ["No resources found in " + ns + " namespace."];
+      return table(
+        ["NAME", "MIN-AVAILABLE", "SELECTOR", "AGE"],
+        items.map((x) => [
+          x.metadata.name,
+          String(x.spec.minAvailable),
+          Object.entries(x.spec.selector).map(([k, v]) => `${k}=${v}`).join(",") || "<none>",
+          formatAge(x.createdAt),
+        ]),
+      );
+    }
+    case "volumesnapshots": {
+      const items = s.volumeSnapshots.filter((x) => x.metadata.namespace === ns);
+      if (items.length === 0) return ["No resources found in " + ns + " namespace."];
+      return table(
+        ["NAME", "SOURCE-PVC", "READY", "RESTORE-SIZE", "AGE"],
+        items.map((x) => [
+          x.metadata.name,
+          x.spec.sourcePVC,
+          x.status.readyToUse ? "true" : "false",
+          `${x.status.restoreSize}Gi`,
+          formatAge(x.createdAt),
+        ]),
+      );
+    }
+    case "verticalpodautoscalers": {
+      const items = s.vpas.filter((x) => x.metadata.namespace === ns);
+      if (items.length === 0) return ["No resources found in " + ns + " namespace."];
+      return table(
+        ["NAME", "TARGET", "MODE", "CPU", "MEM", "AGE"],
+        items.map((x) => [
+          x.metadata.name,
+          `${x.spec.targetRef.kind}/${x.spec.targetRef.name}`,
+          x.spec.mode,
+          String(x.status.recommendedCpu),
+          `${x.status.recommendedMemory}Gi`,
+          formatAge(x.createdAt),
+        ]),
+      );
+    }
     default:
       return [`error: unsupported resource "${canonical}".`];
   }
@@ -477,7 +607,82 @@ export function applyManifests(text: string): CliResult {
 function handleGet(p: Parsed, s: ClusterState): CliResult {
   const [typeToken, name] = p.positional;
   const type = resolveType(typeToken);
-  if (!type) return { lines: [`error: the server doesn't have a resource type "${typeToken ?? ""}"`] };
+  if (!type) {
+    // EndpointSlices — derived from Services + live pods (Phase 11).
+    if (
+      typeToken &&
+      ["endpointslices", "endpointslice", "eps"].includes(typeToken.toLowerCase())
+    ) {
+      const ns = p.namespace ?? s.namespace;
+      const slices = s.services
+        .filter((svc) => svc.metadata.namespace === ns)
+        .map((svc) => computeEndpointSlice(svc, s.pods))
+        .filter((sl) => sl.endpoints.length > 0);
+      if (slices.length === 0) return { lines: ["No resources found."] };
+      return {
+        lines: table(
+          ["NAME", "SERVICE", "PORTS", "ENDPOINTS", "AGE"],
+          slices.map((sl) => [
+            sl.name,
+            sl.service,
+            sl.ports.join(",") || "<none>",
+            sl.endpoints.map((e) => e.ip).join(",") || "<none>",
+            "—",
+          ]),
+        ),
+      };
+    }
+    // CRDs and Custom Resources (Phase 10).
+    if (typeToken && CRD_ALIASES.has(typeToken.toLowerCase())) {
+      if (s.crds.length === 0) return { lines: ["No resources found."] };
+      return {
+        lines: table(
+          ["NAME", "GROUP", "KIND", "SCOPE", "AGE"],
+          s.crds.map((c) => [
+            c.metadata.name,
+            c.spec.group,
+            c.spec.names.kind,
+            c.spec.scope,
+            formatAge(c.createdAt),
+          ]),
+        ),
+      };
+    }
+    const crd = resolveCRD(typeToken, s);
+    if (crd) {
+      const ns = p.namespace ?? s.namespace;
+      const items = s.customResources.filter(
+        (cr) =>
+          cr.kind === crd.spec.names.kind &&
+          (crd.spec.scope === "Cluster" || cr.metadata.namespace === ns),
+      );
+      if (name && (p.output === "yaml" || p.output === "json")) {
+        const found = items.find((cr) => cr.metadata.name === name);
+        if (!found) return { lines: [notFound(crd.spec.names.kind, name)] };
+        return {
+          lines: (p.output === "yaml" ? toYaml : toJson)(
+            crd.spec.names.kind,
+            found as unknown as Record<string, unknown>,
+          ).split("\n"),
+        };
+      }
+      if (items.length === 0) return { lines: ["No resources found."] };
+      const fields = crd.spec.schema.slice(0, 3).map((f) => f.name.toUpperCase());
+      return {
+        lines: table(
+          ["NAME", ...fields, "AGE"],
+          items.map((cr) => [
+            cr.metadata.name,
+            ...crd.spec.schema
+              .slice(0, 3)
+              .map((f) => String(cr.spec[f.name] ?? "")),
+            formatAge(cr.createdAt),
+          ]),
+        ),
+      };
+    }
+    return { lines: [`error: the server doesn't have a resource type "${typeToken ?? ""}"`] };
+  }
   const ns = p.namespace ?? s.namespace;
   const wide = p.output === "wide";
 
@@ -508,7 +713,22 @@ function handleGet(p: Parsed, s: ClusterState): CliResult {
 function handleDescribe(p: Parsed, s: ClusterState): CliResult {
   const [typeToken, name] = p.positional;
   const type = resolveType(typeToken);
-  if (!type) return { lines: [`error: the server doesn't have a resource type "${typeToken ?? ""}"`] };
+  if (!type) {
+    const crd = resolveCRD(typeToken, s);
+    if (crd && name) {
+      const cr = s.customResources.find(
+        (c) => c.kind === crd.spec.names.kind && c.metadata.name === name,
+      );
+      if (!cr) return { lines: [notFound(crd.spec.names.kind, name)] };
+      return {
+        lines: toYaml(
+          crd.spec.names.kind,
+          cr as unknown as Record<string, unknown>,
+        ).split("\n"),
+      };
+    }
+    return { lines: [`error: the server doesn't have a resource type "${typeToken ?? ""}"`] };
+  }
   if (!name) return { lines: [`error: you must specify a resource name`] };
   const ns = p.namespace ?? s.namespace;
 
@@ -539,7 +759,27 @@ function handleDescribe(p: Parsed, s: ClusterState): CliResult {
 function handleDelete(p: Parsed, s: ClusterState): CliResult {
   const [typeToken, name] = p.positional;
   const type = resolveType(typeToken);
-  if (!type) return { lines: [`error: the server doesn't have a resource type "${typeToken ?? ""}"`] };
+  if (!type) {
+    // CRDs and Custom Resources (Phase 10).
+    if (typeToken && CRD_ALIASES.has(typeToken.toLowerCase()) && name) {
+      const crd = s.crds.find(
+        (c) => c.metadata.name === name || c.spec.names.plural === name,
+      );
+      if (!crd) return { lines: [notFound("CustomResourceDefinition", name)] };
+      s.deleteCRD(crd.metadata.uid);
+      return { lines: [`customresourcedefinition.apiextensions.k8s.io "${crd.metadata.name}" deleted`] };
+    }
+    const crd = resolveCRD(typeToken, s);
+    if (crd && name) {
+      const cr = s.customResources.find(
+        (c) => c.kind === crd.spec.names.kind && c.metadata.name === name,
+      );
+      if (!cr) return { lines: [notFound(crd.spec.names.kind, name)] };
+      s.deleteCustomResource(cr.metadata.uid);
+      return { lines: [`${crd.spec.names.singular} "${name}" deleted`] };
+    }
+    return { lines: [`error: the server doesn't have a resource type "${typeToken ?? ""}"`] };
+  }
   if (!name) return { lines: [`error: resource(s) were provided, but no name was specified`] };
   const ns = p.namespace ?? s.namespace;
 
@@ -553,6 +793,16 @@ function handleDelete(p: Parsed, s: ClusterState): CliResult {
 
   const found = findObject(type, s, ns, name);
   if (!found) return { lines: [notFound(type.kind, name)] };
+
+  // RBAC deletes carry a cluster flag.
+  if (type.canonical === "roles" || type.canonical === "clusterroles") {
+    s.deleteRole(found.uid, type.canonical === "clusterroles");
+    return { lines: [`${type.kind.toLowerCase()} "${name}" deleted`] };
+  }
+  if (type.canonical === "rolebindings" || type.canonical === "clusterrolebindings") {
+    s.deleteRoleBinding(found.uid, type.canonical === "clusterrolebindings");
+    return { lines: [`${type.kind.toLowerCase()} "${name}" deleted`] };
+  }
 
   const deleters: Record<string, (id: string) => void> = {
     pods: s.deletePod,
@@ -570,6 +820,13 @@ function handleDelete(p: Parsed, s: ClusterState): CliResult {
     secrets: s.deleteSecret,
     pvc: s.deletePVC,
     pv: s.deletePV,
+    serviceaccounts: s.deleteServiceAccount,
+    resourcequotas: s.deleteResourceQuota,
+    limitranges: s.deleteLimitRange,
+    priorityclasses: s.deletePriorityClass,
+    poddisruptionbudgets: s.deletePodDisruptionBudget,
+    volumesnapshots: s.deleteVolumeSnapshot,
+    verticalpodautoscalers: s.deleteVPA,
   };
   deleters[type.canonical]?.(found.uid);
   return { lines: [`${type.kind.toLowerCase()} "${name}" deleted`] };
@@ -601,10 +858,14 @@ function refName(token: string | undefined): string | undefined {
 function handleRollout(p: Parsed, s: ClusterState): CliResult {
   const sub = p.positional[0]?.toLowerCase();
   const name = refName(p.positional[1]);
-  if (!name) return { lines: ["error: usage: kubectl rollout <status|undo|history> deployment/<name>"] };
+  if (!name) return { lines: ["error: usage: kubectl rollout <status|undo|history|restart> deployment/<name>"] };
   const ns = p.namespace ?? s.namespace;
   const d = s.deployments.find((x) => x.metadata.namespace === ns && x.metadata.name === name);
   if (!d) return { lines: [notFound("deployment", name)] };
+  if (sub === "restart") {
+    s.rolloutRestart(d.metadata.uid);
+    return { lines: [`deployment.apps/${name} restarted`] };
+  }
   if (sub === "undo") {
     s.rollbackDeployment(d.metadata.uid);
     return { lines: [`deployment.apps/${name} rolled back`] };
@@ -619,7 +880,84 @@ function handleRollout(p: Parsed, s: ClusterState): CliResult {
         ...d.revisions.map((r) => `${r.revision}         ${r.image}`),
       ],
     };
-  return { lines: ["error: usage: kubectl rollout <status|undo|history> deployment/<name>"] };
+  return { lines: ["error: usage: kubectl rollout <status|undo|history|restart> deployment/<name>"] };
+}
+
+/** cordon / uncordon / drain <node> (Phase 13). */
+function handleNodeSchedule(verb: string, p: Parsed, s: ClusterState): CliResult {
+  const name = p.positional[0];
+  if (!name) return { lines: [`error: usage: kubectl ${verb} <node>`] };
+  const node = s.nodes.find((n) => n.name === name);
+  if (!node) return { lines: [notFound("node", name)] };
+  if (verb === "cordon") {
+    s.cordonNode(node.id, true);
+    return { lines: [`node/${name} cordoned`] };
+  }
+  if (verb === "uncordon") {
+    s.cordonNode(node.id, false);
+    return { lines: [`node/${name} uncordoned`] };
+  }
+  s.drainNode(node.id);
+  return {
+    lines: [`node/${name} cordoned`, `evicting pods from node/${name}`, `node/${name} drained`],
+  };
+}
+
+/** kubectl wait --for=condition=<cond> <type>/<name> (Phase 13). */
+function handleWait(p: Parsed, s: ClusterState): CliResult {
+  const forArg = p.flags["for"];
+  const target = p.positional[0];
+  if (!target) return { lines: ["error: usage: kubectl wait --for=condition=Ready pod/<name>"] };
+  const [kind, name] = target.includes("/") ? target.split("/") : ["pod", target];
+  const ns = p.namespace ?? s.namespace;
+  if (kind.startsWith("pod")) {
+    const pod = s.pods.find((x) => x.metadata.name === name && x.metadata.namespace === ns);
+    if (!pod) return { lines: [notFound("pod", name)] };
+    const ready = pod.status.phase === "Running" && pod.status.ready !== false;
+    return {
+      lines: [
+        ready
+          ? `pod/${name} condition met (${forArg ?? "condition=Ready"})`
+          : `timed out waiting for the condition on pods/${name} (phase ${pod.status.phase})`,
+      ],
+    };
+  }
+  return { lines: [`error: waiting on ${kind} not supported`] };
+}
+
+function handleApiResources(s: ClusterState): CliResult {
+  const rows = RESOURCES.map((r) => [
+    r.canonical,
+    r.aliases.filter((a) => a !== r.canonical).slice(0, 2).join(",") || "",
+    r.kind,
+    r.namespaced ? "true" : "false",
+  ]);
+  const crdRows = s.crds.map((c) => [
+    c.spec.names.plural,
+    (c.spec.names.shortNames ?? []).join(","),
+    c.spec.names.kind,
+    String(c.spec.scope === "Namespaced"),
+  ]);
+  return {
+    lines: table(["NAME", "SHORTNAMES", "KIND", "NAMESPACED"], [...rows, ...crdRows]),
+  };
+}
+
+function handleExplain(p: Parsed): CliResult {
+  const token = p.positional[0];
+  const type = resolveType(token);
+  if (!type || typeof type === "string")
+    return { lines: [`error: could not explain "${token ?? ""}"`] };
+  return {
+    lines: [
+      `KIND:     ${type.kind}`,
+      `VERSION:  v1`,
+      "",
+      "DESCRIPTION:",
+      `     A ${type.kind} is a ${type.namespaced ? "namespaced" : "cluster-scoped"} kubeSim object.`,
+      `     Use 'kubectl get ${type.canonical}' to list, 'describe' for YAML.`,
+    ],
+  };
 }
 
 function handleSet(p: Parsed, s: ClusterState): CliResult {
@@ -701,18 +1039,82 @@ function handleTop(p: Parsed, s: ClusterState): CliResult {
   return { lines: ["error: usage: kubectl top nodes | kubectl top pods"] };
 }
 
+function handleAuth(p: Parsed, s: ClusterState): CliResult {
+  if (p.positional[0]?.toLowerCase() !== "can-i")
+    return {
+      lines: [
+        "error: usage: kubectl auth can-i <verb> <resource> [--as=<user>|--as=system:serviceaccount:<ns>:<sa>]",
+      ],
+    };
+  const verb = p.positional[1];
+  const resourceToken = p.positional[2];
+  if (!verb || !resourceToken)
+    return { lines: ["error: usage: kubectl auth can-i <verb> <resource>"] };
+  const resolved = resolveType(resourceToken);
+  const resource =
+    typeof resolved === "string"
+      ? resolved
+      : resolved?.canonical ?? resourceToken.toLowerCase();
+  const ns = p.namespace ?? s.namespace;
+
+  let subject: SubjectRef | null = null;
+  const as = typeof p.flags["as"] === "string" ? (p.flags["as"] as string) : undefined;
+  if (as) {
+    if (as.startsWith("system:serviceaccount:")) {
+      const parts = as.split(":");
+      subject = { kind: "ServiceAccount", name: parts[3] ?? "default", namespace: parts[2] ?? ns };
+    } else {
+      subject = { kind: "User", name: as };
+    }
+  } else if (s.ui.rbacSubject) {
+    subject = s.ui.rbacSubject;
+  }
+  if (!subject)
+    return {
+      lines: ["no", "(specify --as=<subject> or pick an 'Inspect as' subject in the UI)"],
+    };
+
+  const allowed = canI(
+    {
+      roles: s.roles,
+      clusterRoles: s.clusterRoles,
+      roleBindings: s.roleBindings,
+      clusterRoleBindings: s.clusterRoleBindings,
+    },
+    subject,
+    verb.toLowerCase(),
+    resource,
+    ns,
+  );
+  return { lines: [allowed ? "yes" : "no"] };
+}
+
 function handleConfig(p: Parsed): CliResult {
   const sub = p.positional[0]?.toLowerCase();
+  const store = useClusterStore.getState();
   if (sub === "get-contexts")
     return {
       lines: table(
         ["CURRENT", "NAME", "CLUSTER", "AUTHINFO"],
-        [["*", "kubesim", "kubesim", "kubesim-admin"]],
+        store.clusters.map((c) => [
+          c.id === store.activeClusterId ? "*" : "",
+          c.name,
+          c.name,
+          "kubesim-admin",
+        ]),
       ),
     };
-  if (sub === "use-context")
-    return { lines: [`Switched to context "${p.positional[1] ?? "kubesim"}".`] };
-  if (sub === "current-context") return { lines: ["kubesim"] };
+  if (sub === "use-context") {
+    const name = p.positional[1];
+    const target = store.clusters.find((c) => c.name === name);
+    if (!target) return { lines: [`error: no context exists with the name: "${name ?? ""}"`] };
+    store.switchCluster(target.id);
+    return { lines: [`Switched to context "${name}".`] };
+  }
+  if (sub === "current-context") {
+    const cur = store.clusters.find((c) => c.id === store.activeClusterId);
+    return { lines: [cur?.name ?? "kubesim"] };
+  }
   return { lines: ["error: usage: kubectl config <get-contexts|use-context|current-context>"] };
 }
 
@@ -721,11 +1123,55 @@ function handleConfig(p: Parsed): CliResult {
 /* ------------------------------------------------------------------ */
 
 function handleCurl(tokens: string[]): CliResult {
-  const target = tokens[2];
+  const args = tokens.slice(2);
+  const fromArg = args.find((a) => a.startsWith("--from="));
+  const fromPod = fromArg ? fromArg.slice(7) : undefined;
+  const target = args.find((a) => !a.startsWith("--"));
   if (!target)
-    return { lines: ["usage: kubesim curl svc/<name>  |  kubesim curl <host><path>"] };
+    return {
+      lines: [
+        "usage: kubesim curl [--from=<pod>] svc/<name> | <svc>.<ns>.svc.cluster.local | <host><path>",
+      ],
+    };
   const store = useClusterStore.getState();
   const flow = useFlowStore.getState();
+  const ns = store.namespace;
+
+  // Pod-to-pod traffic: evaluate NetworkPolicies in both directions (Phase 11).
+  if (fromPod) {
+    const src = store.pods.find(
+      (p) => p.metadata.name === fromPod && p.metadata.namespace === ns,
+    );
+    if (!src) return { lines: [`Error: source pod "${fromPod}" not found in ${ns}`] };
+    const host = target.replace(/^svc\//, "").replace(/\/.*$/, "");
+    const dns = resolveServiceDns(host, store.services, ns);
+    if (!dns) return { lines: [`curl: (6) could not resolve host: ${host}`] };
+    const eps = computeEndpoints(dns.service, store.pods);
+    if (eps.length === 0)
+      return { lines: [`> ${host} resolved to ${dns.fqdn} — 503 (no ready endpoints)`] };
+    const dst = eps[0];
+    const decision = evaluatePodToPod(src, dst, store.networkPolicies);
+    store.pushEvent({
+      type: decision.blocked ? "Warning" : "Normal",
+      reason: decision.blocked ? "PodTrafficBlocked" : "PodTrafficAllowed",
+      message: decision.blocked
+        ? `Pod ${src.metadata.name} → ${dst.metadata.name} blocked by NetworkPolicy ${decision.policyName}.`
+        : `Pod ${src.metadata.name} → ${dst.metadata.name} allowed.`,
+      involvedObject: { kind: "Pod", name: src.metadata.name },
+    });
+    return {
+      lines: decision.blocked
+        ? [
+            `> DNS: ${host} → ${dns.fqdn} (${dns.service.status.clusterIP})`,
+            `curl: (28) connection timed out — blocked by NetworkPolicy "${decision.policyName}"`,
+          ]
+        : [
+            `> DNS: ${host} → ${dns.fqdn} (${dns.service.status.clusterIP})`,
+            `> ${src.metadata.name} → ${dst.metadata.name} (${dst.status.podIP}) — 200 OK`,
+          ],
+    };
+  }
+
   if (target.startsWith("svc/")) {
     const name = target.slice(4);
     const svc = store.services.find((sv) => sv.metadata.name === name);
@@ -744,7 +1190,19 @@ function handleCurl(tokens: string[]): CliResult {
       return { lines: [`> curl http://${host}${path} — via Ingress ${ing.metadata.name} (watch the canvas)…`] };
     }
   }
-  return { lines: [`Error: no Ingress rule matches ${host}${path}`] };
+  // Cluster-DNS service resolution (Phase 11).
+  const dnsHost = host.replace(/:\d+$/, "");
+  const dns = resolveServiceDns(dnsHost, store.services, ns);
+  if (dns) {
+    flow.requestService(dns.service.metadata.uid);
+    return {
+      lines: [
+        `> DNS: ${dnsHost} → ${dns.fqdn} (${dns.service.status.clusterIP ?? "ClusterIP"})`,
+        `> curl ${host}${path} — routing via svc/${dns.service.metadata.name} (watch the canvas)…`,
+      ],
+    };
+  }
+  return { lines: [`curl: (6) could not resolve host: ${host}`] };
 }
 
 /* ------------------------------------------------------------------ */
@@ -764,8 +1222,11 @@ const HELP_LINES = [
   "  kubectl label|annotate <type> <name> key=value",
   "  kubectl logs <pod> [-f]   ·   kubectl exec <pod> -- <cmd>",
   "  kubectl top nodes|pods   ·   kubectl get events",
+  "  kubectl auth can-i <verb> <resource> [--as=<subject>]",
   "  kubectl config get-contexts|use-context",
-  "  kubesim curl svc/<name> | <host><path>   ·   clear · help",
+  "  kubectl get crds|<crd-plural>   ·   kubectl get endpointslices",
+  "  kubesim curl [--from=<pod>] <svc>.<ns>.svc.cluster.local | svc/<name> | <host><path>",
+  "  clear · help",
 ];
 
 export function runKubectl(rawInput: string): CliResult {
@@ -802,6 +1263,18 @@ export function runKubectl(rawInput: string): CliResult {
         return handleSet(p, s);
       case "rollout":
         return handleRollout(p, s);
+      case "cordon":
+        return handleNodeSchedule("cordon", p, s);
+      case "uncordon":
+        return handleNodeSchedule("uncordon", p, s);
+      case "drain":
+        return handleNodeSchedule("drain", p, s);
+      case "wait":
+        return handleWait(p, s);
+      case "api-resources":
+        return handleApiResources(s);
+      case "explain":
+        return handleExplain(p);
       case "expose":
         return handleExpose(p, s);
       case "label":
@@ -812,6 +1285,8 @@ export function runKubectl(rawInput: string): CliResult {
         return handleTop(p, s);
       case "config":
         return handleConfig(p);
+      case "auth":
+        return handleAuth(p, s);
       case "logs": {
         const name = p.positional[0];
         const pod = s.pods.find((x) => x.metadata.name === name);
@@ -849,7 +1324,7 @@ export function runKubectl(rawInput: string): CliResult {
 
 const VERBS = [
   "get", "describe", "delete", "scale", "set", "rollout", "expose", "label",
-  "annotate", "logs", "exec", "top", "config", "create", "apply",
+  "annotate", "logs", "exec", "top", "config", "auth", "create", "apply",
 ];
 
 export function getCompletions(input: string): string[] {

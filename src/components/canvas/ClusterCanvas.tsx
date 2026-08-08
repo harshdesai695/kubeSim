@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -16,6 +16,7 @@ import { useClusterStore } from "@/store/useClusterStore";
 import type { Pod, WorkerNode } from "@/store/types";
 import { endpointNodes } from "@/lib/network";
 import { labelsMatchQuery } from "@/lib/selector";
+import { canI } from "@/lib/rbac";
 import { MasterNode } from "@/components/canvas/nodes/MasterNode";
 import { WorkerNodeCard } from "@/components/canvas/nodes/WorkerNodeCard";
 import { ServiceNode } from "@/components/canvas/nodes/ServiceNode";
@@ -30,6 +31,7 @@ import { AddNodeControl } from "@/components/canvas/AddNodeControl";
 import { SchedulingQueue } from "@/components/canvas/SchedulingQueue";
 import { SelectorInspector } from "@/components/canvas/SelectorInspector";
 import { RequestFlowLayer } from "@/components/canvas/RequestFlowLayer";
+import { TrafficControl } from "@/components/canvas/TrafficControl";
 
 /**
  * ClusterCanvas — the interactive pan/zoom cluster topology.
@@ -81,7 +83,27 @@ export function ClusterCanvas() {
   );
   const namespace = useClusterStore((s) => s.namespace);
   const selectorQuery = useClusterStore((s) => s.ui.selectorQuery);
+  const rbacSubject = useClusterStore((s) => s.ui.rbacSubject);
+  const roles = useClusterStore((s) => s.roles);
+  const clusterRoles = useClusterStore((s) => s.clusterRoles);
+  const roleBindings = useClusterStore((s) => s.roleBindings);
+  const clusterRoleBindings = useClusterStore((s) => s.clusterRoleBindings);
   const openDrawer = useClusterStore((s) => s.openDrawer);
+
+  // RBAC permission overlay: can the selected subject `get` this resource?
+  const rbacAllowed = useCallback(
+    (resource: string) => {
+      if (!rbacSubject) return true;
+      return canI(
+        { roles, clusterRoles, roleBindings, clusterRoleBindings },
+        rbacSubject,
+        "get",
+        resource,
+        namespace,
+      );
+    },
+    [rbacSubject, roles, clusterRoles, roleBindings, clusterRoleBindings, namespace],
+  );
 
   // Namespace-scoped views (Nodes/PVs are cluster-scoped → unfiltered).
   const nsPods = useMemo(
@@ -162,19 +184,24 @@ export function ClusterCanvas() {
 
       nsServices.forEach((svc, i) => {
         const match = labelsMatchQuery(svc.metadata.labels, selectorQuery);
+        const opacity = match && rbacAllowed("services") ? 1 : 0.25;
         upsert(
           svc.metadata.uid,
           "service",
           servicePosition(i),
           { service: svc },
-          { opacity: match ? 1 : 0.25 },
+          { opacity },
         );
       });
 
       nsConfigMaps.forEach((cm, i) => {
-        upsert(cm.metadata.uid, "configmap", configPosition(i), {
-          configMap: cm,
-        });
+        upsert(
+          cm.metadata.uid,
+          "configmap",
+          configPosition(i),
+          { configMap: cm },
+          { opacity: rbacAllowed("configmaps") ? 1 : 0.25 },
+        );
       });
       nsSecrets.forEach((sec, i) => {
         upsert(
@@ -182,11 +209,18 @@ export function ClusterCanvas() {
           "secret",
           configPosition(nsConfigMaps.length + i),
           { secret: sec },
+          { opacity: rbacAllowed("secrets") ? 1 : 0.25 },
         );
       });
 
       nsPVCs.forEach((pvc, i) => {
-        upsert(pvc.metadata.uid, "pvc", pvcPosition(i), { pvc });
+        upsert(
+          pvc.metadata.uid,
+          "pvc",
+          pvcPosition(i),
+          { pvc },
+          { opacity: rbacAllowed("persistentvolumeclaims") ? 1 : 0.25 },
+        );
       });
       persistentVolumes.forEach((pv, i) => {
         upsert(pv.metadata.uid, "pv", pvPosition(i), { pv });
@@ -203,6 +237,7 @@ export function ClusterCanvas() {
     nsPVCs,
     persistentVolumes,
     selectorQuery,
+    rbacAllowed,
     setRfNodes,
   ]);
 
@@ -358,6 +393,7 @@ export function ClusterCanvas() {
       <AddNodeControl />
       <SelectorInspector />
       <SchedulingQueue />
+      <TrafficControl />
       <ReactFlow
         nodes={rfNodes}
         edges={rfEdges}
